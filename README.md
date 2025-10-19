@@ -73,7 +73,6 @@ A safe, colorized **Windows updater** that helps you **update drivers** and **up
   - **SFC**: System file integrity scan
   - **Cleanup**: TEMP folders + **Empty Recycle Bin**
   - **Startup programs**: review launch entries
-- **Pixel Art banner** (auto-shown; no menu option)
 
 > ⚠️ **Microsoft Store** apps must update in **User (non-admin)** context (Windows design).
 
@@ -129,7 +128,7 @@ py -3 -m PyInstaller --noconfirm --clean --onefile --name "SenseisUpdater" --con
 ---
 
 ## Usage Guide
-When launched, you’ll see a pixel art banner and a simple menu.
+When launched, you’ll see a simple menu.
 Choose tasks by number or run targeted flags.
 
 ### Admin vs User Context
