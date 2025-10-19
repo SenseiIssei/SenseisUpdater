@@ -1,0 +1,18 @@
+[project]
+name = "sensei-updater"
+version = "1.0.0"
+description = "Safe, colorized Windows maintenance helper (drivers, winget app updates, DISM/SFC, cleanup)."
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "Your Name" }]
+license = { text = "MIT" }
+dependencies = []
+
+[project.scripts]
+sensei-updater = "sensei_updater.__main__:run"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
