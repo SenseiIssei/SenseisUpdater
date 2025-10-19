@@ -1,3 +1,4 @@
+
 ---
 
 ## ARCHITECTURE.md
@@ -26,7 +27,6 @@ Key goals:
     - Driver update flow (PSWindowsUpdate; supports new/legacy commands)
     - App update selector (parses `winget` `upgrade`/`list` output; falls back gracefully)
     - DISM/SFC and cleanup routines
-    - Pixel art banner auto-shown at startup/menu
   - `main()` which wires flags and launches the interactive menu
 
 - `src/sensei_updater/__main__.py`  
@@ -47,4 +47,3 @@ Key goals:
 - Add new menu items by extending `interactive_menu()` and implementing a method.
 - Add new profiles/filters in the selector by editing `selector_loop()`.
 - To support other package managers, add additional discovery/update methods beside `winget_*`.
-

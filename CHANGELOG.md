@@ -7,4 +7,3 @@
 - Admin gating per action; user/admin contexts supported
 - DISM + SFC, TEMP cleanup + Recycle Bin, Startup listing
 - UTF-8 console + ANSI colors
-- Pixel art banner auto-shown at startup and menu

@@ -35,6 +35,7 @@ DEBUG = ("--debug" in ARGS)
 APP_NAME = "SenseiUpdater"
 CONFIG_DIR = Path(os.getenv("LOCALAPPDATA", Path.home())) / APP_NAME
 CONFIG_PATH = CONFIG_DIR / "config.json"
+KO_FI_URL = "https://ko-fi.com/senseiissei"
 
 # ---------------------------
 # ANSI colors
@@ -103,8 +104,9 @@ class SenseisUpdater:
     def banner(self):
         ctx = "Administrator" if self.is_admin() else "User"
         ctx_color = RED if self.is_admin() else GREEN
-        print(f"\n{SUN}{BOLD}Sensei's Updater{RESET}  {GRAY}— clean • update • repair{RESET}")
+        print(f"\n{SUN}{BOLD}Sensei's Updater{RESET}  {GRAY}— clean • update • repair (safely){RESET}")
         print(f"{ctx_color}{BOLD}Context:{RESET} {ctx}\n")
+        print(f"{GRAY}If you enjoy the updater, you can support me: {WHITE}{BOLD}{KO_FI_URL}{RESET}\n")
 
     def pixel_art_pikachu(self):
         art = [
