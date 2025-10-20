@@ -1,28 +1,51 @@
-import os, ctypes
+import os, ctypes, sys, io
+from datetime import datetime
 from .colors import *
-from ..data.paths import KO_FI_URL
+from ..data.paths import KO_FI_URL, LOG_DIR
 
 class Console:
     def __init__(self, debug: bool=False, dry_run: bool=False):
         self.debug = debug
         self.dry_run = dry_run
+        self._log_fp = None
 
     def enable_windows_ansi_utf8(self):
-        if os.name != "nt": return
+        if os.name == "nt":
+            try:
+                k32 = ctypes.windll.kernel32
+                hOut = k32.GetStdHandle(-11)
+                mode = ctypes.c_uint32()
+                if k32.GetConsoleMode(hOut, ctypes.byref(mode)):
+                    k32.SetConsoleMode(hOut, mode.value | 0x0004)
+                k32.SetConsoleOutputCP(65001)
+                k32.SetConsoleCP(65001)
+            except Exception:
+                pass
         try:
-            k32 = ctypes.windll.kernel32
-            hOut = k32.GetStdHandle(-11)
-            mode = ctypes.c_uint32()
-            if k32.GetConsoleMode(hOut, ctypes.byref(mode)):
-                k32.SetConsoleMode(hOut, mode.value | 0x0004)
-            k32.SetConsoleOutputCP(65001); k32.SetConsoleCP(65001)
+            LOG_DIR.mkdir(parents=True, exist_ok=True)
+            log_path = LOG_DIR / f"run-{datetime.now().strftime('%Y%m%d-%H%M%S')}.log"
+            self._log_fp = open(log_path, "w", encoding="utf-8", errors="replace")
+            class Tee(io.TextIOBase):
+                def __init__(self, a, b): self.a, self.b = a, b
+                def write(self, s): self.a.write(s); self.b.write(s); return len(s)
+                def flush(self): self.a.flush(); self.b.flush()
+            sys.stdout = Tee(sys.stdout, self._log_fp)
+            sys.stderr = Tee(sys.stderr, self._log_fp)
+        except Exception:
+            pass
+
+    def close(self):
+        try:
+            if self._log_fp: self._log_fp.close()
         except Exception:
             pass
 
     def is_admin(self) -> bool:
         if os.name != "nt": return False
-        try: return bool(ctypes.windll.shell32.IsUserAnAdmin())
-        except Exception: return False
+        try:
+            return bool(ctypes.windll.shell32.IsUserAnAdmin())
+        except Exception:
+            return False
 
     def header(self, title: str):
         print(f"{ORANGE2}{BOLD}{'='*80}{RESET}")
