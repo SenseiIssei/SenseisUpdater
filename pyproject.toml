@@ -1,18 +1,16 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "sensei-updater"
-version = "1.0.0"
-description = "Safe, colorized Windows maintenance helper (drivers, winget app updates, DISM/SFC, cleanup)."
+version = "1.2.0"
+description = "Safe Windows driver and software updater with profiles, reports, and diagnostics."
 readme = "README.md"
 requires-python = ">=3.9"
-authors = [{ name = "Your Name" }]
-license = { text = "MIT" }
-dependencies = []
 
 [project.scripts]
-sensei-updater = "sensei_updater.__main__:run"
-
-[tool.setuptools]
-package-dir = {"" = "src"}
+sensei-updater = "sensei_updater.main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -15,6 +15,18 @@ class AppService:
         self.proc = Process(debug=console.debug, dry_run=console.dry_run)
         self.cfg = cfg
 
+    # --- quick environment checks & messaging ---
+    def check_environment(self):
+        rc, out = self.proc.run_capture(["winget","--version"])
+        if rc != 0:
+            self.console.warn("winget was not found or failed to run. Install/update 'App Installer' from Microsoft Store, then reopen the terminal.")
+            return
+        # JSON support = nicer parsing
+        rc2, out2 = self.proc.run_capture(["winget","upgrade","--output","json"])
+        if rc2 != 0 or not (out2 or "").lstrip().startswith(("{","[")):
+            self.console.warn("Your winget may not support JSON output. Parsing will fall back to table mode. Consider updating App Installer for more reliable output.")
+
+    # --- parsing + listing ---
     def _parse_table(self, text: str):
         lines = [ln.rstrip() for ln in (text or "").splitlines()]
         rows = []
@@ -145,7 +157,6 @@ class AppService:
                 self.console.ok(f"Updated interactively: {pid}")
                 results["interactive"].append(pid)
             else:
-                # reinstall fallback
                 self.console.info(f"{pid}: trying reinstall…")
                 rc3 = self.proc.run_stream(["winget","install","--id",pid,"--accept-package-agreements","--accept-source-agreements","--silent"])
                 if rc3 == 0:
