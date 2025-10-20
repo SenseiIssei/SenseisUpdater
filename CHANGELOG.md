@@ -1,9 +1,22 @@
 # Changelog
 
-## 1.0.0
-- Initial public release
-- Drivers via Windows Update (PSWindowsUpdate new/legacy)
-- App updates selector with robust winget parsing and profiles
-- Admin gating per action; user/admin contexts supported
-- DISM + SFC, TEMP cleanup + Recycle Bin, Startup listing
-- UTF-8 console + ANSI colors
+## [1.2.0] - 2025-10-20
+### Added
+- Run summaries and exportable reports (`--report json|txt`, `--out <path>`)
+- Profiles and non-interactive updates (`--profile <name>`, `--yes`)
+- Diagnostics pack (`--diagnostics`, `--diag-out <zip>`)
+- Pending reboot detection with safety warning
+- Scheduling via Windows Task Scheduler (`--schedule weekly|monthly`, `--time`, `--task-name`, `--unschedule`)
+- EXE-first build flow and build script
+- Modular package structure under `src/`
+
+### Changed
+- Smarter handling of Microsoft Store apps with context guidance
+- Aggregated results for winget updates (updated, interactive, reinstalled, skipped, store-skipped, failed)
+- Expanded README and troubleshooting
+
+### Fixed
+- Encoding issues by enforcing UTF-8 in PowerShell and console
+
+### Notes
+- No telemetry; privacy by default

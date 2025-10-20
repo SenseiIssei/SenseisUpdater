@@ -55,20 +55,21 @@ This is our living plan for Sensei’s Updater. It focuses on safety, clarity, a
 
 ### NOW (v1.x maintenance & UX polish)
 - **Run summary & reports**
-  - [ ] End-of-run summary (updated, skipped, failed, reboot required).
-  - [ ] `--report json|txt` and `--out <path>` to export results.
+  - [x] End-of-run summary (updated, skipped, failed, reboot required).
+  - [x] `--report json|txt` and `--out <path>` to export results.
 - **Pending reboot detection**
-  - [ ] Warn if Windows signals a required reboot before updates.
+  - [x] Warn if Windows signals a required reboot before updates.
 - **Profiles & non-interactive**
-  - [ ] `--profile <name>` to auto-load a saved selection.
-  - [ ] `--yes` to apply without extra confirmation (power users/CI).
+  - [x] `--profile <name>` to auto-load a saved selection.
+  - [x] `--yes` to apply without extra confirmation (power users/CI).
 - **Diagnostics (opt-in, local only)**
-  - [ ] `--diagnostics` to create a zip (logs, versions, last report) for bug reports.
+  - [x] `--diagnostics` to create a zip (logs, versions, last report) for bug reports.
 - **Robustness**
-  - [ ] Timeouts + clearer errors around PowerShell/winget.
-  - [ ] Smarter handling of Store apps (admin vs user context hints).
+  - [x] Smarter handling of Store apps (admin vs user context hints).
+  - [ ] Timeouts and additional resilience for long-running processes.
 - **Docs**
-  - [ ] Expand README troubleshooting, add GIF of the flow.
+  - [x] Expand README troubleshooting.
+  - [ ] Add GIF of the flow.
   - [ ] CONTRIBUTING guide with issue templates (bug/feature).
 
 ---
@@ -79,7 +80,7 @@ This is our living plan for Sensei’s Updater. It focuses on safety, clarity, a
   - [ ] Scrollable table with filter/search/sort; multi-select with checkboxes.
   - [ ] Inline progress, status badges (Updated / Skipped / Needs input).
 - **Scheduling (opt-in)**
-  - [ ] `--schedule weekly|monthly` creates a Task Scheduler entry.
+  - [x] `--schedule weekly|monthly` creates a Task Scheduler entry.
   - [ ] Logs to `%LOCALAPPDATA%\SenseiUpdater\logs\`.
 - **Config file**
   - [ ] `%LOCALAPPDATA%\SenseiUpdater\settings.json` (default profile, color on/off, PowerShell 7 preference, timeouts).
@@ -118,8 +119,8 @@ This is our living plan for Sensei’s Updater. It focuses on safety, clarity, a
   - [ ] Lints & type checks (ruff/mypy) on PRs.
   - [ ] Smoke tests on Windows runners (list upgrades; parse outputs).
 - **CI pipelines**
-  - [ ] GitHub Actions: build EXE artifacts on every push/tag.
-  - [ ] GitLab CI: tagged release pipeline with attached EXE.
+  - [x] GitHub Actions: build EXE artifacts on every push/tag.
+  - [x] GitLab CI: tagged release pipeline with attached EXE.
 - **Release hygiene**
   - [ ] Changelog entries per release; semantic versioning.
   - [ ] Release notes with known issues, Store app guidance.
@@ -130,7 +131,7 @@ This is our living plan for Sensei’s Updater. It focuses on safety, clarity, a
 - **No default telemetry.**  
   If we ever add usage metrics:
   - [ ] `--analytics opt-in` flag only (explicit, reversible).
-  - [ ] Collect *only* count + app version + coarse OS version, no IDs.
+  - [ ] Collect only count + app version + coarse OS version, no IDs.
   - [ ] Publicly document endpoint and publish raw counts for verification.
 
 ---
