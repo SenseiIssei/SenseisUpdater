@@ -88,3 +88,10 @@ Get-CimInstance Win32_StartupCommand |
   Sort-Object Name |
   Format-Table -AutoSize
 ''')
+        
+    def open_store_library(self):
+        try:
+            rc = self.proc.run_stream(["cmd", "/c", "start", "ms-windows-store://downloadsandupdates"])
+            return rc == 0
+        except Exception:
+            return False

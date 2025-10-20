@@ -53,6 +53,6 @@ jobs:
         with:
           tag: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
-          bodyFile: RELEASE_NOTES_v1.2.0.md
+          bodyFile: RELEASE_NOTES_v1.3.0.md
           artifacts: artifacts/SenseisUpdater.exe
           artifactContentType: application/vnd.microsoft.portable-executable

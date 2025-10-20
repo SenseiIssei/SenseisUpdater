@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.3.0] - 2025-10-20
+### Added
+- Visible progress animation during silent and interactive installs.
+- Upgrade-scan cache with TTL (default 15 minutes), configurable via settings.
+- Profiles export/import via CLI and Menu.
+- Microsoft Store Library helper to open updates page.
+- Log files for every run in `%LOCALAPPDATA%\SenseiUpdater\logs\`.
+
+### Changed
+- Faster, more resilient winget parsing with graceful timeouts and cache fallback.
+- Settings file now includes defaults and cache TTL.
+
+### Fixed
+- Menu responsiveness while scanning; clearer feedback when winget is slow.
+
 ## [1.2.0] - 2025-10-20
 ### Added
 - Run summaries and exportable reports (`--report json|txt`, `--out <path>`)

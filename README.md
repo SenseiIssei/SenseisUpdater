@@ -46,97 +46,88 @@ A safe, colorized **Windows updater** that helps you **update drivers** and **up
 This is our living plan for Sensei’s Updater. It focuses on safety, clarity, and Windows-native tooling. Items are grouped by timeframe, with high-level milestones and concrete tasks.
 
 ### Guiding Principles
-- **Safety first:** no forced changes; clear prompts; restore point support.
-- **Windows-native:** drivers via Windows Update; apps via winget.
-- **Privacy by default:** no telemetry; any analytics must be explicit opt-in.
-- **Clarity & UX:** helpful messages, colorized output, minimal friction.
+- Safety first: no forced changes; clear prompts; restore point support.
+- Windows-native: drivers via Windows Update; apps via winget.
+- Privacy by default: no telemetry; any analytics must be explicit opt-in.
+- Clarity & UX: helpful messages, colorized output, minimal friction.
 
 ---
 
 ### NOW (v1.x maintenance & UX polish)
-- **Run summary & reports**
+- Run summary & reports
   - [x] End-of-run summary (updated, skipped, failed, reboot required).
   - [x] `--report json|txt` and `--out <path>` to export results.
-- **Pending reboot detection**
+- Pending reboot detection
   - [x] Warn if Windows signals a required reboot before updates.
-- **Profiles & non-interactive**
+- Profiles & non-interactive
   - [x] `--profile <name>` to auto-load a saved selection.
   - [x] `--yes` to apply without extra confirmation (power users/CI).
-- **Diagnostics (opt-in, local only)**
-  - [x] `--diagnostics` to create a zip (logs, versions, last report) for bug reports.
-- **Robustness**
+- Diagnostics (opt-in, local only)
+  - [x] `--diagnostics` to create a zip (logs, versions, last report).
+- Robustness
   - [x] Smarter handling of Store apps (admin vs user context hints).
-  - [ ] Timeouts and additional resilience for long-running processes.
-- **Docs**
-  - [x] Expand README troubleshooting.
+  - [x] Visible progress during installs; non-blocking streaming.
+  - [x] Cache with TTL for upgrade scans.
+- Docs
+  - [x] Expanded README troubleshooting.
   - [ ] Add GIF of the flow.
   - [ ] CONTRIBUTING guide with issue templates (bug/feature).
 
 ---
 
 ### NEXT (v2.0 usability leap)
-- **Rich terminal UI (TUI)**
-  - [ ] Migrate menu to a TUI (e.g., Textual / prompt_toolkit).
-  - [ ] Scrollable table with filter/search/sort; multi-select with checkboxes.
-  - [ ] Inline progress, status badges (Updated / Skipped / Needs input).
-- **Scheduling (opt-in)**
+- Rich terminal UI (TUI)
+  - [ ] Deferred for now.
+- Scheduling (opt-in)
   - [x] `--schedule weekly|monthly` creates a Task Scheduler entry.
-  - [ ] Logs to `%LOCALAPPDATA%\SenseiUpdater\logs\`.
-- **Config file**
-  - [ ] `%LOCALAPPDATA%\SenseiUpdater\settings.json` (default profile, color on/off, PowerShell 7 preference, timeouts).
-- **Store integration helpers**
-  - [ ] One-click open Microsoft Store Library for pending Store updates.
-- **Export/Import selections**
-  - [ ] `--export profile.json` / `--import profile.json` to share app sets.
+  - [x] Logs to `%LOCALAPPDATA%\SenseiUpdater\logs\`.
+- Config file
+  - [x] `%LOCALAPPDATA%\SenseiUpdater\settings.json` (defaults, cache TTL, scheduling).
+- Store integration helpers
+  - [x] Open Microsoft Store Library for pending updates.
+- Export/Import selections
+  - [x] `--export profile.json` / `--import profile.json`.
 
 ---
 
 ### LATER (v3.x+ features & ecosystem)
-- **GUI options**
-  - [ ] TUI-in-a-window (WebView wrapper) for a lightweight “GUI feel”.
-  - [ ] Full GUI (PySide6/Qt) as an optional download (larger EXE).
-- **“Update All” policy engine (advanced users)**
-  - [ ] Rules to include/exclude sources (winget/msstore), categories, or IDs.
-  - [ ] Optional “silent only”; skip apps requiring interactive installers.
-- **Enterprise-friendly switches**
-  - [ ] Read-only audit mode `--audit` (no changes; JSON report for scripts).
-  - [ ] Proxy settings; offline catalogs (where possible).
-- **Rollback helpers**
-  - [ ] Snapshot app list pre-update; guide to uninstall/reinstall on failures.
-  - [ ] Driver rollback guidance (lean on Restore Points & Windows UI).
-- **Localization**
-  - [ ] i18n framework; start with EN → DE translations of messages.
-- **Plugin surface (exploration)**
-  - [ ] Optional modules for reporting, export formats, or additional checks.
-- **Security**
-  - [ ] Signed builds (code signing) for EXE distributions.
-  - [ ] Supply chain: pinned PyInstaller, reproducible build notes.
+- GUI options
+  - [ ] TUI-in-a-window (WebView wrapper) or full GUI (PySide6/Qt) as optional build.
+- “Update All” policy engine (advanced users)
+  - [ ] Rules for sources/categories; skip interactive installers.
+- Enterprise-friendly switches
+  - [ ] Read-only audit mode `--audit`; proxy settings; offline catalogs.
+- Rollback helpers
+  - [ ] Snapshot app list pre-update; guidance to uninstall/reinstall; driver rollback guidance.
+- Localization
+  - [ ] i18n framework; EN → DE first.
+- Plugin surface (exploration)
+  - [ ] Optional modules for reporting/export formats.
+- Security
+  - [ ] Signed builds; reproducible build notes.
 
 ---
 
 ### QUALITY, TESTS & CI
-- **Automated checks**
+- Automated checks
   - [ ] Lints & type checks (ruff/mypy) on PRs.
-  - [ ] Smoke tests on Windows runners (list upgrades; parse outputs).
-- **CI pipelines**
-  - [x] GitHub Actions: build EXE artifacts on every push/tag.
+  - [ ] Smoke tests on Windows runners.
+- CI pipelines
+  - [x] GitHub Actions: build EXE artifacts on push/tag.
   - [x] GitLab CI: tagged release pipeline with attached EXE.
-- **Release hygiene**
-  - [ ] Changelog entries per release; semantic versioning.
-  - [ ] Release notes with known issues, Store app guidance.
+- Release hygiene
+  - [x] Changelog entries per release; semantic versioning.
+  - [ ] Release notes with known issues and Store app tips per release.
 
 ---
 
 ### Telemetry & Feedback (always opt-in)
-- **No default telemetry.**  
-  If we ever add usage metrics:
-  - [ ] `--analytics opt-in` flag only (explicit, reversible).
-  - [ ] Collect only count + app version + coarse OS version, no IDs.
-  - [ ] Publicly document endpoint and publish raw counts for verification.
+- No default telemetry.
+  - [ ] If ever added, must be explicit opt-in, minimal, public counts.
 
 ---
 
-### NON-GOALS (what we won’t do)
+### NON-GOALS
 - ❌ Install unsigned drivers or bypass Windows security.
 - ❌ Replace Windows Update with third-party driver bundles.
 - ❌ Silent background services or hidden updates.
@@ -145,10 +136,10 @@ This is our living plan for Sensei’s Updater. It focuses on safety, clarity, a
 ---
 
 ### Versioning & Cadence
-- **v1.x**: Stability and UX polish (reports, profiles, robustness).
-- **v2.0**: TUI upgrade, scheduling, config, export/import.
-- **v3.x**: Optional GUI builds, policy engine, enterprise options.
-- **Cadence**: Aim for minor updates every 2–6 weeks; patch releases as needed.
+- v1.x: Stability and UX polish (reports, profiles, robustness).
+- v2.0: TUI or GUI track if/when reintroduced, plus scheduling/config enhancements.
+- v3.x: Optional GUI builds, policy engine, enterprise options.
+- Cadence: Aim for minor updates every 2–6 weeks; patch releases as needed.
 
 ---
 

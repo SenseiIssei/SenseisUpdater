@@ -5,9 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "sensei-updater"
 version = "1.2.0"
-description = "Safe Windows driver and software updater with profiles, reports, and diagnostics."
+description = "Safe Windows driver and software updater with profiles, reports, diagnostics, scheduling, and TUI."
 readme = "README.md"
 requires-python = ">=3.9"
+dependencies = []
+
+[project.optional-dependencies]
+tui = ["textual>=0.62.0"]
 
 [project.scripts]
 sensei-updater = "sensei_updater.main:main"
