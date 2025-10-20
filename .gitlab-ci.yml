@@ -2,58 +2,32 @@ stages:
   - build
   - release
 
-# ---------------------------------------
-# 1) Branch builds
-# ---------------------------------------
-build:windows:
+build-windows:
   stage: build
-  tags: [ "windows" ]
-  rules:
-    - if: '$CI_COMMIT_TAG == null'
-  before_script:
-    # If Python isn't preinstalled on the runner, uncomment ONE of the installers below:
-    # - Using winget (Windows 10/11):
-    # - powershell: winget install -e --id Python.Python.3.11 --source winget --silent
-    # - Using Chocolatey:
-    # - powershell: choco install -y python --version=3.11.9
-    - 'py -3 -m pip install --upgrade pip'
-    - 'py -3 -m pip install pyinstaller'
+  tags: ["windows"]
   script:
-    - 'powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts/build_exe.ps1 -Name "SenseisUpdater"'
+    - py -3 -m pip install --upgrade pip
+    - py -3 -m pip install -e .
+    - py -3 -m pip install pyinstaller
+    - powershell -ExecutionPolicy Bypass -File scripts/build_exe.ps1 -Name "SenseisUpdater"
   artifacts:
-    name: "SenseisUpdater-$CI_COMMIT_REF_SLUG"
     paths:
       - dist/SenseisUpdater.exe
-    expire_in: 7 days
+    expire_in: 2 weeks
 
-# ---------------------------------------
-# 2) Tagged builds → Release with asset
-# ---------------------------------------
-release:windows:
+release:
   stage: release
-  tags: [ "windows" ]
-  rules:
-    - if: '$CI_COMMIT_TAG'
-  before_script:
-    - 'py -3 -m pip install --upgrade pip'
-    - 'py -3 -m pip install pyinstaller'
+  needs: ["build-windows"]
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
   script:
-    - 'powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts/build_exe.ps1 -Name "SenseisUpdater"'
-  artifacts:
-    when: always
-    name: "SenseisUpdater-$CI_COMMIT_TAG"
-    paths:
-      - dist/SenseisUpdater.exe
-    expire_in: 3 months
+    - echo "Releasing $CI_COMMIT_TAG"
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/'
   release:
-    tag_name: "$CI_COMMIT_TAG"
-    name: "Sensei's Updater $CI_COMMIT_TAG"
-    description: |
-      Automated release for $CI_COMMIT_TAG.
-
-      If you enjoy the updater, you can support me:
-      https://ko-fi.com/senseiissei
+    name: '$CI_COMMIT_TAG'
+    tag_name: '$CI_COMMIT_TAG'
+    description: 'Release $CI_COMMIT_TAG'
     assets:
       links:
-        - name: "SenseisUpdater.exe"
-          url: "$CI_JOB_URL/artifacts/file/dist/SenseisUpdater.exe"
+        - name: 'SenseisUpdater.exe'
+          url: '$CI_PROJECT_URL/-/jobs/$CI_JOB_ID/artifacts/file/dist/SenseisUpdater.exe'

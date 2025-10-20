@@ -1,10 +1,26 @@
 # Contributing
 
-Thanks for wanting to contribute!
+Thank you for helping improve Sensei's Updater.
 
-## Dev setup
+## Setup
+- Python 3.11+
+- Windows 10/11
+- Install editable: `python -m pip install -e .`
 
-```powershell
-py -3 -m pip install --upgrade pip
-py -3 -m pip install -e .
-python -m sensei_updater --debug
+## Run
+- Interactive: `python -m sensei_updater`
+- Build EXE: `scripts/build_exe.ps1`
+
+## Style
+- No inline comments in code
+- Keep functions small and focused
+- Use UTF-8 for all files
+
+## Tests
+- Manual smoke tests on Windows
+- Report issues with diagnostics zip
+
+## Issues and PRs
+- Use templates and clear titles
+- Reference related issues
+- One logical change per PR
