@@ -41,6 +41,124 @@ A safe, colorized **Windows updater** that helps you **update drivers** and **up
 
 ---
 
+## Roadmap
+
+This is our living plan for Sensei’s Updater. It focuses on safety, clarity, and Windows-native tooling. Items are grouped by timeframe, with high-level milestones and concrete tasks.
+
+### Guiding Principles
+- **Safety first:** no forced changes; clear prompts; restore point support.
+- **Windows-native:** drivers via Windows Update; apps via winget.
+- **Privacy by default:** no telemetry; any analytics must be explicit opt-in.
+- **Clarity & UX:** helpful messages, colorized output, minimal friction.
+
+---
+
+### NOW (v1.x maintenance & UX polish)
+- **Run summary & reports**
+  - [ ] End-of-run summary (updated, skipped, failed, reboot required).
+  - [ ] `--report json|txt` and `--out <path>` to export results.
+- **Pending reboot detection**
+  - [ ] Warn if Windows signals a required reboot before updates.
+- **Profiles & non-interactive**
+  - [ ] `--profile <name>` to auto-load a saved selection.
+  - [ ] `--yes` to apply without extra confirmation (power users/CI).
+- **Diagnostics (opt-in, local only)**
+  - [ ] `--diagnostics` to create a zip (logs, versions, last report) for bug reports.
+- **Robustness**
+  - [ ] Timeouts + clearer errors around PowerShell/winget.
+  - [ ] Smarter handling of Store apps (admin vs user context hints).
+- **Docs**
+  - [ ] Expand README troubleshooting, add GIF of the flow.
+  - [ ] CONTRIBUTING guide with issue templates (bug/feature).
+
+---
+
+### NEXT (v2.0 usability leap)
+- **Rich terminal UI (TUI)**
+  - [ ] Migrate menu to a TUI (e.g., Textual / prompt_toolkit).
+  - [ ] Scrollable table with filter/search/sort; multi-select with checkboxes.
+  - [ ] Inline progress, status badges (Updated / Skipped / Needs input).
+- **Scheduling (opt-in)**
+  - [ ] `--schedule weekly|monthly` creates a Task Scheduler entry.
+  - [ ] Logs to `%LOCALAPPDATA%\SenseiUpdater\logs\`.
+- **Config file**
+  - [ ] `%LOCALAPPDATA%\SenseiUpdater\settings.json` (default profile, color on/off, PowerShell 7 preference, timeouts).
+- **Store integration helpers**
+  - [ ] One-click open Microsoft Store Library for pending Store updates.
+- **Export/Import selections**
+  - [ ] `--export profile.json` / `--import profile.json` to share app sets.
+
+---
+
+### LATER (v3.x+ features & ecosystem)
+- **GUI options**
+  - [ ] TUI-in-a-window (WebView wrapper) for a lightweight “GUI feel”.
+  - [ ] Full GUI (PySide6/Qt) as an optional download (larger EXE).
+- **“Update All” policy engine (advanced users)**
+  - [ ] Rules to include/exclude sources (winget/msstore), categories, or IDs.
+  - [ ] Optional “silent only”; skip apps requiring interactive installers.
+- **Enterprise-friendly switches**
+  - [ ] Read-only audit mode `--audit` (no changes; JSON report for scripts).
+  - [ ] Proxy settings; offline catalogs (where possible).
+- **Rollback helpers**
+  - [ ] Snapshot app list pre-update; guide to uninstall/reinstall on failures.
+  - [ ] Driver rollback guidance (lean on Restore Points & Windows UI).
+- **Localization**
+  - [ ] i18n framework; start with EN → DE translations of messages.
+- **Plugin surface (exploration)**
+  - [ ] Optional modules for reporting, export formats, or additional checks.
+- **Security**
+  - [ ] Signed builds (code signing) for EXE distributions.
+  - [ ] Supply chain: pinned PyInstaller, reproducible build notes.
+
+---
+
+### QUALITY, TESTS & CI
+- **Automated checks**
+  - [ ] Lints & type checks (ruff/mypy) on PRs.
+  - [ ] Smoke tests on Windows runners (list upgrades; parse outputs).
+- **CI pipelines**
+  - [ ] GitHub Actions: build EXE artifacts on every push/tag.
+  - [ ] GitLab CI: tagged release pipeline with attached EXE.
+- **Release hygiene**
+  - [ ] Changelog entries per release; semantic versioning.
+  - [ ] Release notes with known issues, Store app guidance.
+
+---
+
+### Telemetry & Feedback (always opt-in)
+- **No default telemetry.**  
+  If we ever add usage metrics:
+  - [ ] `--analytics opt-in` flag only (explicit, reversible).
+  - [ ] Collect *only* count + app version + coarse OS version, no IDs.
+  - [ ] Publicly document endpoint and publish raw counts for verification.
+
+---
+
+### NON-GOALS (what we won’t do)
+- ❌ Install unsigned drivers or bypass Windows security.
+- ❌ Replace Windows Update with third-party driver bundles.
+- ❌ Silent background services or hidden updates.
+- ❌ Collect personal/system identifiers without explicit opt-in.
+
+---
+
+### Versioning & Cadence
+- **v1.x**: Stability and UX polish (reports, profiles, robustness).
+- **v2.0**: TUI upgrade, scheduling, config, export/import.
+- **v3.x**: Optional GUI builds, policy engine, enterprise options.
+- **Cadence**: Aim for minor updates every 2–6 weeks; patch releases as needed.
+
+---
+
+### How to track progress
+- We use GitHub issues with labels:
+  - `type:feature`, `type:bug`, `type:ux`, `good first issue`, `help wanted`.
+- Milestones reflect the **Now / Next / Later** buckets above.
+- Feedback welcome in Discussions; diagnostics are manual and opt-in.
+
+---
+
 ## Why choose Sensei’s Updater?
 
 - **Windows-native & trustworthy**  
