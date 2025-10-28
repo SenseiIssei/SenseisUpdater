@@ -3,6 +3,10 @@ from datetime import datetime
 from .colors import *
 from ..data.paths import KO_FI_URL, LOG_DIR
 
+class _NullIO(io.TextIOBase):
+    def write(self, s): return len(s) if s is not None else 0
+    def flush(self): return
+
 class Console:
     def __init__(self, debug: bool=False, dry_run: bool=False):
         self.debug = debug
@@ -25,23 +29,36 @@ class Console:
             LOG_DIR.mkdir(parents=True, exist_ok=True)
             log_path = LOG_DIR / f"run-{datetime.now().strftime('%Y%m%d-%H%M%S')}.log"
             self._log_fp = open(log_path, "w", encoding="utf-8", errors="replace")
+            a = sys.stdout if getattr(sys.stdout, "write", None) else _NullIO()
+            b = self._log_fp
             class Tee(io.TextIOBase):
                 def __init__(self, a, b): self.a, self.b = a, b
-                def write(self, s): self.a.write(s); self.b.write(s); return len(s)
-                def flush(self): self.a.flush(); self.b.flush()
-            sys.stdout = Tee(sys.stdout, self._log_fp)
-            sys.stderr = Tee(sys.stderr, self._log_fp)
+                def write(self, s): 
+                    try: self.a.write(s)
+                    except Exception: pass
+                    try: self.b.write(s)
+                    except Exception: pass
+                    return len(s) if s is not None else 0
+                def flush(self):
+                    try: self.a.flush()
+                    except Exception: pass
+                    try: self.b.flush()
+                    except Exception: pass
+            sys.stdout = Tee(a, b)
+            sys.stderr = Tee(sys.stderr if getattr(sys.stderr, "write", None) else _NullIO(), b)
         except Exception:
             pass
 
     def close(self):
         try:
-            if self._log_fp: self._log_fp.close()
+            if self._log_fp:
+                self._log_fp.close()
         except Exception:
             pass
 
     def is_admin(self) -> bool:
-        if os.name != "nt": return False
+        if os.name != "nt":
+            return False
         try:
             return bool(ctypes.windll.shell32.IsUserAnAdmin())
         except Exception:

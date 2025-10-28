@@ -15,11 +15,17 @@ class Spinner:
     def _run(self, msg):
         frames = itertools.cycle(["|", "/", "-", "\\"])
         while not self._stop.is_set():
-            sys.stdout.write(f"\r{msg} {next(frames)}")
-            sys.stdout.flush()
+            try:
+                sys.stdout.write(f"\r{msg} {next(frames)}")
+                sys.stdout.flush()
+            except Exception:
+                pass
             time.sleep(0.1)
-        sys.stdout.write("\r" + " " * (len(msg) + 2) + "\r")
-        sys.stdout.flush()
+        try:
+            sys.stdout.write("\r" + " " * (len(msg) + 2) + "\r")
+            sys.stdout.flush()
+        except Exception:
+            pass
 
     def stop(self):
         if self._t:

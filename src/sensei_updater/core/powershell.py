@@ -1,4 +1,4 @@
-import os, tempfile
+import os, tempfile, platform
 from .process import Process
 
 PS_PREFIX = r'''
@@ -12,14 +12,21 @@ $OutputEncoding = [System.Text.UTF8Encoding]::new()
 class PowerShell:
     def __init__(self, proc: Process):
         self.proc = proc
-        self.exe = "powershell.exe" if os.name == "nt" else "pwsh"
+        self.exe = "powershell.exe" if platform.system() == "Windows" else "pwsh"
 
     def run(self, script: str) -> int:
         full = PS_PREFIX + "\n" + script
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".ps1", mode="w", encoding="utf-8") as f:
-            f.write(full); path = f.name
+        f = None
         try:
-            return self.proc.run_stream([self.exe, "-NoLogo","-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-File", path])
+            f = tempfile.NamedTemporaryFile(delete=False, suffix=".ps1", mode="w", encoding="utf-8")
+            f.write(full)
+            f.close()
+            return self.proc.run_stream([self.exe, "-NoLogo","-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-File", f.name])
+        except Exception:
+            return 1
         finally:
-            try: os.remove(path)
-            except Exception: pass
+            try:
+                if f and f.name and os.path.exists(f.name):
+                    os.remove(f.name)
+            except Exception:
+                pass

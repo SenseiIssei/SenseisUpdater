@@ -19,7 +19,10 @@ class ConfigStore:
                 "report": "json",
                 "out": "%LOCALAPPDATA%\\SenseiUpdater\\last-run.json",
                 "prefer_tui": False,
-                "cache_ttl_minutes": 15
+                "cache_ttl_minutes": 60,
+                "force_refresh": False,
+                "skip_store_scan": True,
+                "scan_timeout_sec": 45
             }
         }
 
@@ -73,7 +76,10 @@ class ConfigStore:
         d.setdefault("report", "json")
         d.setdefault("out", "%LOCALAPPDATA%\\SenseiUpdater\\last-run.json")
         d.setdefault("prefer_tui", False)
-        d.setdefault("cache_ttl_minutes", 15)
+        d.setdefault("cache_ttl_minutes", 60)
+        d.setdefault("force_refresh", False)
+        d.setdefault("skip_store_scan", True)
+        d.setdefault("scan_timeout_sec", 45)
         self.settings["defaults"] = d
         return d
 

@@ -1,7 +1,5 @@
-from .main import main
-
-def run():
-    main()
+import sys
+from .main import run
 
 if __name__ == "__main__":
-    run()
+    sys.exit(run())
