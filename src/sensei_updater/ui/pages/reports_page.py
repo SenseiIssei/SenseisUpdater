@@ -57,14 +57,12 @@ class ReportsPage(QWidget):
         pad.addWidget(card)
         root.addLayout(pad, 1)
 
-        self.overlay = BusyOverlay(self, compact=True)
-        self.jobs = JobController(self, self.overlay)
+        self.overlay = None
+        self.jobs = None
 
         self.btn_refresh.clicked.connect(self.refresh)
         self.btn_open_dir.clicked.connect(self.open_dir)
         self.list.currentItemChanged.connect(self._on_select)
-
-        self.refresh()
 
     def _resolve_base_dir(self) -> Path:
         d = self.cfg.get_defaults() or {}

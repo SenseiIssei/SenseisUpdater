@@ -185,9 +185,5 @@ class PageStack(QStackedWidget):
     def __init__(self):
         super().__init__(); self._anim = None
     def setCurrentIndexAnimated(self, idx):
-        old = self.currentWidget(); super().setCurrentIndex(idx); new = self.currentWidget()
-        if not old or not new or old is new: return
-        eff = QGraphicsOpacityEffect(new); new.setGraphicsEffect(eff); eff.setOpacity(0.0)
-        a = QPropertyAnimation(eff, b"opacity", self)
-        a.setDuration(160); a.setStartValue(0.0); a.setEndValue(1.0); a.setEasingCurve(QEasingCurve.OutCubic)
-        self._anim = a; a.start()
+        # Simplify to avoid cross-thread/parent issues in some environments
+        super().setCurrentIndex(idx)

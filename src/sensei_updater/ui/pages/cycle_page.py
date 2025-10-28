@@ -1,12 +1,20 @@
+# sensei_updater/ui/pages/cycle_page.py
 from __future__ import annotations
 from typing import Dict, Any, List
-
-from PySide6.QtCore import Qt, QRect, QEasingCurve, QPropertyAnimation, QPoint
+import os
+from pathlib import Path
+from datetime import datetime
+from PySide6.QtCore import Qt, QRect, QEasingCurve, QPropertyAnimation, QPoint, Signal, Slot
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QListWidget, QListWidgetItem, QFrame
-
 from ..widgets import Header, GlassCard
 from ..async_utils import BusyOverlay, JobController, run_async
+from ...domain.reports import RunReport
 
+def _expand_env(path_str: str) -> Path:
+    try:
+        return Path(os.path.expandvars(path_str)).expanduser()
+    except Exception:
+        return Path(path_str).expanduser()
 
 class StepItem(QFrame):
     def __init__(self, text: str):
@@ -22,7 +30,6 @@ class StepItem(QFrame):
         h.addWidget(self.dot)
         h.addWidget(self.label)
         h.addStretch()
-
 
 class Stepper(QWidget):
     def __init__(self, steps: List[str]):
@@ -69,21 +76,22 @@ class Stepper(QWidget):
             self._anim.setEndValue(dest)
             self._anim.start()
 
-
 class CyclePage(QWidget):
+    bumpProgress = Signal(int, str)
+    stepProgress = Signal(int)
+
     def __init__(self, app_service, driver_service, system_service, cfg):
         super().__init__()
         self.app = app_service
         self.drivers = driver_service
         self.system = system_service
         self.cfg = cfg
-
+        self.bumpProgress.connect(self._on_bump, Qt.QueuedConnection)
+        self.stepProgress.connect(self._on_step_progress, Qt.QueuedConnection)
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
-
         root.addWidget(Header("Cycle"))
-
         wrap = GlassCard()
         flow = QHBoxLayout()
         flow.setSpacing(16)
@@ -98,7 +106,6 @@ class CyclePage(QWidget):
             "Finish"
         ])
         flow.addWidget(self.stepper, 0)
-
         right = QVBoxLayout()
         right.setSpacing(8)
         self.status = QLabel("Ready")
@@ -118,15 +125,12 @@ class CyclePage(QWidget):
         right.addLayout(ctrl)
         flow.addLayout(right, 1)
         wrap.v.addLayout(flow)
-
         pad = QVBoxLayout()
         pad.setContentsMargins(24, 24, 24, 24)
         pad.addWidget(wrap)
         root.addLayout(pad, 1)
-
         self.overlay = BusyOverlay(self, compact=True)
         self.jobs = JobController(self, self.overlay)
-
         self.btn_run.clicked.connect(self.run_all)
         self.btn_rescan.clicked.connect(self.scan_only)
 
@@ -134,10 +138,53 @@ class CyclePage(QWidget):
         self.out.addItem(QListWidgetItem(text))
         self.out.scrollToBottom()
 
-    def _bump(self, step_idx: int, msg: str, progress_emit, msg_emit, pval: int):
+    @Slot(int, str)
+    def _on_bump(self, step_idx: int, msg: str):
         self.stepper.setCurrent(step_idx, instant=False)
+        self.overlay.label.setText(msg)
+
+    @Slot(int)
+    def _on_step_progress(self, pct: int):
+        self.jobs._prog.set_target.emit(max(0, min(100, pct)))
+
+    def _bump(self, step_idx: int, msg: str, progress_emit, msg_emit, pval: int):
+        self.bumpProgress.emit(step_idx, msg)
+        self.stepProgress.emit(pval)
         msg_emit(msg)
         progress_emit(pval)
+
+    def _resolve_reports_dir(self) -> Path:
+        d = self.cfg.get_defaults() or {}
+        out = d.get("out") or r"%LOCALAPPDATA%\SenseiUpdater\last-run.json"
+        p = _expand_env(out)
+        if p.suffix:
+            return p.parent
+        return p
+
+    def _save_report(self, rep: RunReport, d: Dict[str, Any]):
+        rep.driver_success = bool(d.get("drivers", {}).get("installed"))
+        rep.reboot_required = bool(d.get("drivers", {}).get("reboot"))
+        for x in d.get("apps", {}).get("updated", []):
+            rep.updated.append(x)
+        for x in d.get("apps", {}).get("reinstalled", []):
+            rep.reinstalled.append(x)
+        for x in d.get("apps", {}).get("failed", []):
+            rep.failed.append(x)
+        for x in d.get("apps", {}).get("skipped", []):
+            rep.skipped.append(x)
+        for x in d.get("apps", {}).get("store_skipped", []):
+            rep.store_skipped.append(x)
+        for n in d.get("notes", []):
+            rep.notes.append(n)
+        rep.mark_finished()
+        base = self._resolve_reports_dir()
+        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+        base.mkdir(parents=True, exist_ok=True)
+        json_path = base / f"run-{ts}.json"
+        txt_path = base / f"run-{ts}.txt"
+        rep.save("json", json_path)
+        rep.save("txt", txt_path)
+        return str(json_path), str(txt_path)
 
     def scan_only(self):
         def task(progress, message):
@@ -149,13 +196,13 @@ class CyclePage(QWidget):
             self._bump(0, "Preparing to scan…", progress, message, 5)
             try:
                 self._bump(1, "Scanning drivers…", progress, message, 20)
-                drv = self.drivers.list_available(timeout_sec=max(120, scan_to)) or []
+                drv = self.drivers.list_available(timeout_sec=max(180, scan_to)) or []
             except Exception as e:
                 drv = []
                 res["notes"].append(f"drivers_scan_error: {e}")
             try:
                 self._bump(3, "Scanning apps…", progress, message, 60)
-                apps = self.app.list_upgrades_all(force_refresh=force, skip_store=skip_store, scan_timeout=max(180, scan_to)) or []
+                apps = self.app.list_upgrades_all(force_refresh=force, skip_store=skip_store) or []
             except Exception as e:
                 apps = []
                 res["notes"].append(f"apps_scan_error: {e}")
@@ -178,7 +225,7 @@ class CyclePage(QWidget):
                 self._append(f"Note: {n}")
 
         t, w = run_async(task)
-        self.jobs.start(t, w, "Scanning…", [self.btn_run, self.btn_rescan], done, timeout_ms=300_000)
+        self.jobs.start(t, w, "Scanning…", [self.btn_run, self.btn_rescan], done, timeout_ms=360000)
 
     def run_all(self):
         def task(progress, message):
@@ -190,14 +237,15 @@ class CyclePage(QWidget):
                 "health": {"ok": False},
                 "notes": []
             }
+            rep = RunReport()
             d = self.cfg.get_defaults() or {}
             force = bool(d.get("force_refresh"))
             skip_store = bool(d.get("skip_store_scan", True))
-            scan_to = int(d.get("scan_timeout_sec", 180))
+            scan_to = int(d.get("scan_timeout_sec", 240))
             self._bump(0, "Preparing…", progress, message, 5)
             try:
                 self._bump(1, "Scanning drivers…", progress, message, 15)
-                drv_rows = self.drivers.list_available(timeout_sec=max(180, scan_to)) or []
+                drv_rows = self.drivers.list_available(timeout_sec=max(240, scan_to)) or []
             except Exception as e:
                 drv_rows = []
                 out["notes"].append(f"drivers_scan_error: {e}")
@@ -213,7 +261,7 @@ class CyclePage(QWidget):
                     out["notes"].append(f"drivers_install_error: {e}")
             self._bump(3, "Scanning apps…", progress, message, 55)
             try:
-                app_rows = self.app.list_upgrades_all(force_refresh=force, skip_store=skip_store, scan_timeout=max(240, scan_to)) or []
+                app_rows = self.app.list_upgrades_all(force_refresh=force, skip_store=skip_store) or []
             except Exception as e:
                 app_rows = []
                 out["notes"].append(f"apps_scan_error: {e}")
@@ -247,6 +295,8 @@ class CyclePage(QWidget):
                     out["drivers"]["reboot"] = True or out["drivers"]["reboot"]
             except Exception:
                 pass
+            paths = self._save_report(rep, out)
+            out["report_paths"] = paths
             self._bump(7, "Finish", progress, message, 100)
             return out
 
@@ -270,8 +320,11 @@ class CyclePage(QWidget):
             self._append(f"Health: {'OK' if hl.get('ok') else 'Skipped/Failed'}")
             for n in res.get("notes", []):
                 self._append(f"Note: {n}")
+            rp = res.get("report_paths") or ()
+            if rp:
+                self._append(f"Report saved: {rp[0]}")
             if drv.get("reboot"):
                 self._append("A reboot is recommended.")
 
         t, w = run_async(task)
-        self.jobs.start(t, w, "Running full cycle…", [self.btn_run, self.btn_rescan], done, timeout_ms=1_200_000)
+        self.jobs.start(t, w, "Running full cycle…", [self.btn_run, self.btn_rescan], done, timeout_ms=1440000)

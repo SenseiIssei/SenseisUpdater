@@ -1,10 +1,12 @@
+# sensei_updater/services/driver_service.py
 from ..core.powershell import PowerShell
 from ..core.process import Process
 from ..core.admin import require_admin_or_msg
 from ..core.console import Console
-import json, time
+import json
 
 PS_SCAN = r'''
+$ErrorActionPreference="Stop"
 try { $null = Get-Module PSWindowsUpdate -ListAvailable } catch {}
 try {
   if (-not (Get-Module -ListAvailable -Name PSWindowsUpdate)) {
@@ -17,7 +19,7 @@ try { Import-Module PSWindowsUpdate -Force -ErrorAction SilentlyContinue } catch
 try { Add-WUServiceManager -MicrosoftUpdate -Confirm:$false | Out-Null } catch {}
 try {
   $d = Get-WindowsUpdate -MicrosoftUpdate -Category 'Drivers' -ErrorAction Stop
-  if ($d) { $d | Select-Object Title,KB,Size,RebootRequired | ConvertTo-Json -Depth 3 } else { "[]" }
+  if ($d) { $d | Select-Object Title,KB,Size,RebootRequired | ConvertTo-Json -Depth 3 } else { "[]"}
 } catch {
   if (Get-Command Get-WUList -ErrorAction SilentlyContinue) {
     $d = Get-WUList -MicrosoftUpdate -Category Drivers
@@ -29,6 +31,7 @@ try {
 '''
 
 PS_INSTALL_PREP = r'''
+$ErrorActionPreference="Stop"
 try {
   if (-not (Get-PackageProvider -Name NuGet -ListAvailable -ErrorAction SilentlyContinue)) { Install-PackageProvider -Name NuGet -Force -Scope AllUsers | Out-Null }
   try { $repo = Get-PSRepository -Name "PSGallery" -ErrorAction Stop; if ($repo.InstallationPolicy -ne "Trusted") { Set-PSRepository -Name "PSGallery" -InstallationPolicy Trusted } }
@@ -39,22 +42,13 @@ try {
 } catch { "READY" }
 '''
 
-def _now_ms():
-    return int(time.time() * 1000)
-
 class DriverService:
     def __init__(self, console: Console):
         self.console = console
         self.proc = Process(debug=console.debug, dry_run=console.dry_run)
         self.ps = PowerShell(self.proc)
 
-    def _prepare_scan(self) -> bool:
-        rc, out, to = self.proc.run_capture_timeout([self.ps.exe, "-NoLogo","-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-Command", PS_SCAN], 120)
-        if to or rc != 0:
-            return False
-        return True
-
-    def list_available(self, timeout_sec: int = 120):
+    def list_available(self, timeout_sec: int = 180):
         rc, out, to = self.proc.run_capture_timeout([self.ps.exe, "-NoLogo","-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-Command", PS_SCAN], timeout_sec)
         if to or rc != 0:
             return []
@@ -77,7 +71,7 @@ class DriverService:
     def _ensure_install_ready(self) -> bool:
         if not require_admin_or_msg(self.console, "Driver Install"):
             return False
-        rc, out, to = self.proc.run_capture_timeout([self.ps.exe, "-NoLogo","-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-Command", PS_INSTALL_PREP], 90)
+        rc, out, to = self.proc.run_capture_timeout([self.ps.exe, "-NoLogo","-NoProfile","-NonInteractive","-ExecutionPolicy","Bypass","-Command", PS_INSTALL_PREP], 120)
         return not to and rc == 0 and "READY" in (out or "")
 
     def install_kbs(self, kb_list: list[str]):

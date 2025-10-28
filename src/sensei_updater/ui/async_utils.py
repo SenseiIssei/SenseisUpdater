@@ -1,6 +1,6 @@
+# sensei_updater/ui/async_utils.py
 from PySide6.QtCore import QObject, QThread, QTimer, Qt, Signal, Slot, QEasingCurve, QPropertyAnimation, QRect
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QProgressBar
-
 
 class Worker(QObject):
     progress = Signal(int)
@@ -31,7 +31,6 @@ class Worker(QObject):
     def _emit_message(self, s: str):
         self.message.emit(s or "")
 
-
 def run_async(fn, *args, **kwargs):
     t = QThread()
     w = Worker(fn, *args, **kwargs)
@@ -39,16 +38,16 @@ def run_async(fn, *args, **kwargs):
     t.started.connect(w.run, Qt.QueuedConnection)
     return t, w
 
-
 class BusyOverlay(QWidget):
     def __init__(self, parent: QWidget, compact: bool = False):
         super().__init__(parent)
         self.setObjectName("Overlay")
         self.compact = bool(compact)
-        self.setAttribute(Qt.WA_TransparentForMouseEvents, not self.compact)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         self.setStyleSheet("background:rgba(10,10,10,140);" if not self.compact else "background:transparent;")
         if self.compact:
             self.label = QLabel("", self)
+            self.label.setObjectName("OverlayLabel")
             self.label.setStyleSheet("color:#FFD166;font-size:12px;")
             self.bar = QProgressBar(self)
             self.bar.setFixedHeight(8)
@@ -59,6 +58,7 @@ class BusyOverlay(QWidget):
             lay.setContentsMargins(48, 48, 48, 48)
             lay.setAlignment(Qt.AlignCenter)
             self.label = QLabel("Working…")
+            self.label.setObjectName("OverlayLabel")
             self.label.setStyleSheet("color:#FFD166;font-size:16px;")
             self.bar = QProgressBar()
             self.bar.setRange(0, 100)
@@ -88,19 +88,15 @@ class BusyOverlay(QWidget):
             self.setGeometry(self.parent().rect())
 
     def show_smooth(self):
-        if self.compact:
-            self.setWindowOpacity(1.0)
-            self.show()
-            self.raise_()
-            return
-        self.setWindowOpacity(0.0)
+        self.setWindowOpacity(1.0 if self.compact else 0.0)
         self.show()
         self.raise_()
-        self._fade.stop()
-        self._hiding = False
-        self._fade.setStartValue(0.0)
-        self._fade.setEndValue(1.0)
-        self._fade.start()
+        if not self.compact:
+            self._fade.stop()
+            self._hiding = False
+            self._fade.setStartValue(0.0)
+            self._fade.setEndValue(1.0)
+            self._fade.start()
 
     def hide_smooth(self):
         if self.compact:
@@ -111,7 +107,6 @@ class BusyOverlay(QWidget):
         self._fade.setStartValue(1.0)
         self._fade.setEndValue(0.0)
         self._fade.start()
-
 
 class ProgressDriver(QObject):
     set_target = Signal(int)
@@ -142,7 +137,8 @@ class ProgressDriver(QObject):
     def _on_set_target(self, v: int):
         if self.bar.maximum() == 0:
             return
-        self._target = max(0, min(100, v))
+        v = max(0, min(100, v))
+        self._target = max(self._target, v)
 
     def _on_finish(self):
         if self.bar.maximum() == 0:
@@ -157,7 +153,6 @@ class ProgressDriver(QObject):
         if self._cur < self._target:
             self._cur += max(1, int((self._target - self._cur) * 0.18))
             self.bar.setValue(self._cur)
-
 
 class JobController(QObject):
     def __init__(self, owner: QWidget, overlay: BusyOverlay):
@@ -207,26 +202,17 @@ class JobController(QObject):
         def on_timeout():
             finish_ui()
             cleanup()
-            try:
-                on_done({"error": "timeout"})
-            except Exception:
-                pass
+            QTimer.singleShot(0, lambda: on_done({"error": "timeout"}))
 
         def on_ok(res):
             finish_ui()
             cleanup()
-            try:
-                on_done(res)
-            except Exception:
-                pass
+            QTimer.singleShot(0, lambda: on_done(res))
 
         def on_fail(msg):
             finish_ui()
             cleanup()
-            try:
-                on_done({"error": msg})
-            except Exception:
-                pass
+            QTimer.singleShot(0, lambda: on_done({"error": msg}))
 
         setup_ui()
         self._active.add((thread, worker, timer))
@@ -241,4 +227,4 @@ class JobController(QObject):
         thread.finished.connect(lambda: QTimer.singleShot(0, cleanup), Qt.QueuedConnection)
         timer.timeout.connect(on_timeout, Qt.QueuedConnection)
         timer.start(max(3000, int(timeout_ms) if timeout_ms else 60000))
-        thread.start()
+        QTimer.singleShot(0, thread.start)

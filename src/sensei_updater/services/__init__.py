@@ -1,5 +1,5 @@
-from .apps import AppService
-from .drivers import DriverService
+from .apps_service import AppService
+from .drivers_service import DriverService
 from .scheduler import SchedulerService
 from .system import SystemService
 
