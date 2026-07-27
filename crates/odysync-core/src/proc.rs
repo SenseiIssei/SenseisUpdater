@@ -1,4 +1,4 @@
-﻿//! Process execution that never flashes a console window.
+//! Process execution that never flashes a console window.
 //!
 //! The old version spawned `winget` and PowerShell through the shell, so every
 //! scan and every install popped a terminal on screen — unusable for a tool
@@ -64,9 +64,55 @@ impl Output {
     }
 }
 
+/// Resolve a bare program name against `PATH` and `PATHEXT` on Windows.
+///
+/// `CreateProcess` searches `PATH` but only ever appends `.exe`, so
+/// `Command::new("npm")` fails on a machine where npm exists solely as
+/// `npm.cmd` — which is every Windows install of Node. The npm and VS Code
+/// backends therefore reported themselves "not available" on hosts that
+/// plainly had them, and no error was ever surfaced because an unavailable
+/// backend is simply skipped.
+///
+/// Doing the `PATHEXT` walk here rather than routing through `cmd.exe` keeps
+/// the module's promise: arguments stay a vector, so there is still no shell
+/// and no injection surface.
+#[cfg(windows)]
+fn resolve_program(program: &str) -> std::path::PathBuf {
+    use std::path::{Path, PathBuf};
+
+    let raw = Path::new(program);
+    // An explicit path, or a name that already carries its extension, is
+    // something `CreateProcess` resolves correctly on its own.
+    if raw.components().count() > 1 || raw.extension().is_some() {
+        return raw.to_path_buf();
+    }
+
+    let pathext = std::env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string());
+
+    if let Some(path) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path) {
+            for ext in pathext.split(';').filter(|e| !e.is_empty()) {
+                let candidate = dir.join(format!("{program}{ext}"));
+                if candidate.is_file() {
+                    return candidate;
+                }
+            }
+        }
+    }
+
+    // Nothing matched. Hand the bare name over anyway so the caller still gets
+    // the familiar "not found on PATH" error from the spawn.
+    PathBuf::from(program)
+}
+
+#[cfg(not(windows))]
+fn resolve_program(program: &str) -> &str {
+    program
+}
+
 /// Build a `Command` configured for silent, non-interactive background use.
 fn build<S: AsRef<OsStr>>(program: &str, args: &[S]) -> Command {
-    let mut cmd = Command::new(program);
+    let mut cmd = Command::new(resolve_program(program));
     cmd.args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -207,6 +253,38 @@ mod tests {
         } else {
             ("echo", vec!["hello"])
         }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn a_bare_name_resolves_through_pathext() {
+        // `cmd` lives in System32 as `cmd.exe` and is always on PATH, so this
+        // asserts the lookup finds a real file and appends an extension.
+        let resolved = resolve_program("cmd");
+        assert!(resolved.is_file(), "did not resolve cmd: {resolved:?}");
+        assert!(resolved.extension().is_some());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn an_explicit_extension_or_path_is_left_alone() {
+        assert_eq!(
+            resolve_program("powershell.exe"),
+            std::path::Path::new("powershell.exe")
+        );
+        assert_eq!(
+            resolve_program(r"C:\Windows\System32\cmd.exe"),
+            std::path::Path::new(r"C:\Windows\System32\cmd.exe")
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn an_unresolvable_name_is_passed_through_unchanged() {
+        assert_eq!(
+            resolve_program("odysync-definitely-not-a-real-program"),
+            std::path::Path::new("odysync-definitely-not-a-real-program")
+        );
     }
 
     #[tokio::test]
