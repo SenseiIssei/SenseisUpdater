@@ -200,12 +200,21 @@ Nothing new is built until the existing thing is proven.
       listed, each with `requires administrator privileges` as its inline skip
       reason. Before this work, none of them appeared at all.
 
+- [x] **Hold by KB number.** `PackageId` gained an optional alias that the
+      policy engine matches alongside the native id, so `odysync hold
+      KB5101650` works while the native id stays `<guid>.<revision>` for the
+      Update Agent. The alias is excluded from equality and hashing — a label
+      must not change a package's identity when `PackageId` is a map key.
+      Verified against a real pending update: the skip reason changed from
+      *requires administrator privileges* to *held by policy*, which also
+      confirms holds outrank the elevation rule as the engine intends.
+- [x] **`odysync pause <backend> --days N` / `resume <backend>`.** Modelled as
+      a deadline rather than an off switch, and generic over backends rather
+      than special-cased to Windows. Verified: pausing `windows-update` hid it
+      while leaving `windows-defender-update` available.
+
 Remaining:
 
-- [ ] Deferral: pause all Windows updates for N days. Per-KB holds already work
-      through the existing syntax (`windows-update:<guid>.<rev>`), but a KB
-      number is the handle a user actually knows — `windows-update:KB5101650`
-      should resolve too.
 - [ ] GUI: a dedicated Windows Update card with the class breakdown and a
       "restart now / later" affordance. They currently appear in the generic
       updates list, which works but buries the distinction.

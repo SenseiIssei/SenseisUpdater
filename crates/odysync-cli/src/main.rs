@@ -102,6 +102,27 @@ enum Command {
     /// Remove a hold.
     Unhold { package: String },
 
+    /// Defer a whole backend for a number of days.
+    ///
+    /// A deadline rather than an off switch: the pause lapses on its own, so a
+    /// bad week does not turn into a year of missed security updates.
+    Pause {
+        /// Backend id, e.g. `windows-update`.
+        backend: String,
+        /// How many days to defer for.
+        #[arg(long, default_value = "7")]
+        days: u32,
+        /// Why, for your future self.
+        #[arg(long)]
+        note: Option<String>,
+    },
+
+    /// Lift a pause before it lapses.
+    Resume {
+        /// Backend id, e.g. `windows-update`.
+        backend: String,
+    },
+
     /// Show the resolved configuration and where it lives.
     Config,
 
@@ -460,6 +481,53 @@ async fn run(cli: Cli) -> Result<u8> {
             } else {
                 config.save(&config_path)?;
                 println!("Released {package}.");
+            }
+            Ok(0)
+        }
+
+        Command::Pause {
+            backend,
+            days,
+            note,
+        } => {
+            let Some(kind) = odysync_core::model::BackendKind::from_id(&backend) else {
+                anyhow::bail!(
+                    "unknown backend {backend:?}. `odysync backends` lists the ones on this machine."
+                );
+            };
+
+            let until = chrono::Utc::now() + chrono::Duration::days(days as i64);
+            config.pause_backend(kind, until, note);
+            config.save(&config_path)?;
+
+            println!(
+                "Paused {} for {days} day(s), until {}.",
+                kind.id(),
+                until.format("%Y-%m-%d %H:%M UTC")
+            );
+            // Said out loud because a paused security backend is exactly the
+            // state a user can forget they put the machine into.
+            if kind.requires_elevation() {
+                println!(
+                    "{}",
+                    style.dim("  It resumes on its own; `odysync resume` lifts it sooner.")
+                );
+            }
+            Ok(0)
+        }
+
+        Command::Resume { backend } => {
+            let Some(kind) = odysync_core::model::BackendKind::from_id(&backend) else {
+                anyhow::bail!(
+                    "unknown backend {backend:?}. `odysync backends` lists the ones on this machine."
+                );
+            };
+
+            if config.resume_backend(kind) {
+                config.save(&config_path)?;
+                println!("Resumed {}.", kind.id());
+            } else {
+                println!("{} was not paused.", kind.id());
             }
             Ok(0)
         }

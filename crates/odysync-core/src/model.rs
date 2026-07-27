@@ -320,11 +320,47 @@ impl fmt::Display for BackendKind {
 }
 
 /// A globally unique handle for a package: backend + that backend's own id.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+///
+/// Equality and hashing deliberately ignore [`alias`](PackageId::alias) — see
+/// the manual impls below.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PackageId {
     pub backend: BackendKind,
     /// The backend's native identifier, e.g. `Mozilla.Firefox` or `firefox`.
     pub native: String,
+    /// A second name the user is more likely to know this package by.
+    ///
+    /// Exists for Windows Update, whose native id has to be
+    /// `<update-guid>.<revision>` — that is what the Update Agent accepts, and
+    /// pinning the exact revision is required by the backend contract. Nobody
+    /// holds an update by GUID, though; they hold `KB5101650`. The alias lets
+    /// [`crate::policy::Policy`] match either.
+    ///
+    /// Not part of the package's identity, only an extra way to name it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alias: Option<String>,
+}
+
+/// Identity is `(backend, native)` and nothing else.
+///
+/// Deriving `PartialEq` would have folded `alias` into equality, so the same
+/// package would compare unequal to itself depending on whether the alias
+/// happened to be filled in — and `PackageId` is used as a `HashMap` key and
+/// to correlate a scan result with its apply outcome. An alias is a label, not
+/// a distinguishing feature.
+impl PartialEq for PackageId {
+    fn eq(&self, other: &Self) -> bool {
+        self.backend == other.backend && self.native == other.native
+    }
+}
+
+impl Eq for PackageId {}
+
+impl std::hash::Hash for PackageId {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.backend.hash(state);
+        self.native.hash(state);
+    }
 }
 
 impl PackageId {
@@ -332,7 +368,21 @@ impl PackageId {
         Self {
             backend,
             native: native.into(),
+            alias: None,
         }
+    }
+
+    /// Add a friendlier name the user can also hold or exclude this package by.
+    pub fn with_alias(mut self, alias: impl Into<String>) -> Self {
+        let alias = alias.into();
+        // An empty alias would make `Policy::matches` compare against "", and
+        // a hold pattern that trims to nothing would then match everything.
+        self.alias = if alias.trim().is_empty() {
+            None
+        } else {
+            Some(alias)
+        };
+        self
     }
 
     /// Validate the native package ID against shell injection and path traversal.
@@ -573,6 +623,60 @@ mod tests {
             BackendKind::ALL.contains(&kind),
             "{kind} is missing from BackendKind::ALL"
         );
+    }
+
+    #[test]
+    fn an_alias_does_not_change_a_packages_identity() {
+        // `PackageId` is a HashMap key and correlates a scan result with its
+        // apply outcome. Deriving equality would have made the same package
+        // unequal to itself once an alias was attached.
+        let bare = PackageId::new(BackendKind::WindowsUpdate, "guid.3");
+        let aliased = PackageId::new(BackendKind::WindowsUpdate, "guid.3").with_alias("KB5101650");
+
+        assert_eq!(bare, aliased);
+
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+        let hash_of = |id: &PackageId| {
+            let mut h = DefaultHasher::new();
+            id.hash(&mut h);
+            h.finish()
+        };
+        assert_eq!(hash_of(&bare), hash_of(&aliased));
+
+        let mut map = std::collections::HashMap::new();
+        map.insert(bare.clone(), "scanned");
+        assert_eq!(map.get(&aliased), Some(&"scanned"));
+    }
+
+    #[test]
+    fn a_blank_alias_is_dropped_rather_than_stored() {
+        // An empty alias would be compared against a trimmed hold pattern,
+        // and an empty pattern would then match everything.
+        assert_eq!(
+            PackageId::new(BackendKind::Winget, "x")
+                .with_alias("   ")
+                .alias,
+            None
+        );
+        assert_eq!(
+            PackageId::new(BackendKind::Winget, "x")
+                .with_alias("KB1")
+                .alias
+                .as_deref(),
+            Some("KB1")
+        );
+    }
+
+    #[test]
+    fn an_absent_alias_is_omitted_from_the_serialised_form() {
+        // Config and report files are read by humans; a null on every package
+        // is noise, and older files without the field must still load.
+        let json = serde_json::to_string(&PackageId::new(BackendKind::Winget, "x")).unwrap();
+        assert!(!json.contains("alias"), "{json}");
+
+        let back: PackageId = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.alias, None);
     }
 
     #[test]

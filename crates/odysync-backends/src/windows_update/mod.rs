@@ -96,8 +96,17 @@ impl Default for WindowsUpdateBackend {
 /// a pre-release, and it moves when Microsoft revises the update in place.
 /// Identity is carried by the `PackageId` and the KB number, where it belongs.
 fn to_candidate(kind: BackendKind, update: &WuaUpdate) -> UpdateCandidate {
+    // The native id has to be `<guid>.<revision>`: that is what the Update
+    // Agent accepts, and pinning the exact revision is required by the backend
+    // contract. But nobody holds an update by GUID — they hold `KB5101650`, so
+    // that goes on as an alias the policy engine will also match.
+    let mut id = PackageId::new(kind, update.key());
+    if let Some(kb) = update.kb_ids.first() {
+        id = id.with_alias(format!("KB{kb}"));
+    }
+
     UpdateCandidate {
-        id: PackageId::new(kind, update.key()),
+        id,
         name: update.title.clone(),
         installed: Version::parse("0"),
         // A revision of 0 would compare equal to "not installed" and the

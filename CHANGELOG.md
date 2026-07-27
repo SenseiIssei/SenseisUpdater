@@ -20,6 +20,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   written by earlier versions.
 - `BackendKind::ALL` and `BackendKind::from_id`, replacing the hand-written
   46-arm id match in the Tauri layer. A test keeps the list exhaustive.
+- **Hold a Windows update by its KB number.** Its native id has to be
+  `<guid>.<revision>` — that is what the Update Agent accepts, and pinning the
+  exact revision is required by the backend contract — but nobody holds an
+  update by GUID. `PackageId` now carries an optional alias that the policy
+  engine also matches, so `odysync hold KB5101650` works. The alias is
+  deliberately excluded from equality and hashing: `PackageId` is a map key and
+  correlates a scan result with its apply outcome, so a label must not change
+  identity.
+- **`odysync pause <backend> --days N` and `odysync resume <backend>`.** A
+  deadline rather than an off switch — "off" gets set during one bad week and
+  is still off a year later, which is how machines end up unpatched. An
+  unparseable deadline in a hand-edited config is treated as *expired* rather
+  than permanent, so a typo cannot silently stop security updates forever.
+- An empty or whitespace-only pattern in `exclude` or `holds` now matches
+  nothing. It previously compared equal to a package whose native id was
+  empty, and silently skipping an update is the exact failure the policy engine
+  exists to prevent.
 - `odysync backends` now names **who** verifies each backend's payloads —
   winget, apt, the Windows Update Agent — instead of implying Odysync did.
   Odysync almost never holds an installer file: the package manager downloads
