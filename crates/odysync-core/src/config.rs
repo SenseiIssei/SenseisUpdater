@@ -15,6 +15,12 @@ pub struct Config {
     pub policy: Policy,
     /// Backends to skip entirely. Empty means "use everything available".
     pub disabled_backends: Vec<String>,
+    /// Backends that are off until named here.
+    ///
+    /// Only [`BackendKind::enabled_by_default`] returning `false` puts a
+    /// backend in this position — today that is Windows feature upgrades.
+    /// Listing one here is the user saying "yes, this specific thing too".
+    pub enabled_backends: Vec<String>,
     /// Named sets of packages, for updating a subset at a time.
     pub profiles: Vec<Profile>,
     /// Take a system restore point (Windows) before applying anything.
@@ -49,6 +55,7 @@ impl Default for Config {
         Self {
             policy: Policy::default(),
             disabled_backends: Vec::new(),
+            enabled_backends: Vec::new(),
             profiles: Vec::new(),
             restore_point: true,
             scan_interval_hours: 24,
@@ -105,11 +112,23 @@ impl Config {
     }
 
     /// Whether `kind` should be used during this run.
+    ///
+    /// An explicit disable always wins, so a user who turns something off does
+    /// not have it turned back on by an opt-in list they edited earlier.
     pub fn backend_enabled(&self, kind: BackendKind) -> bool {
-        !self
+        if self
             .disabled_backends
             .iter()
             .any(|d| d.eq_ignore_ascii_case(kind.id()))
+        {
+            return false;
+        }
+
+        kind.enabled_by_default()
+            || self
+                .enabled_backends
+                .iter()
+                .any(|e| e.eq_ignore_ascii_case(kind.id()))
     }
 
     pub fn profile(&self, name: &str) -> Option<&Profile> {
@@ -160,5 +179,49 @@ mod tests {
         assert!(loaded.backend_enabled(BackendKind::Winget));
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn feature_upgrades_are_off_until_named() {
+        let mut cfg = Config::default();
+        assert!(
+            !cfg.backend_enabled(BackendKind::WindowsFeatureUpdate),
+            "a Windows version upgrade must never be on by default"
+        );
+
+        cfg.enabled_backends.push("windows-feature-update".into());
+        assert!(cfg.backend_enabled(BackendKind::WindowsFeatureUpdate));
+    }
+
+    #[test]
+    fn disabling_beats_opting_in() {
+        let cfg = Config {
+            enabled_backends: vec!["windows-feature-update".into()],
+            disabled_backends: vec!["windows-feature-update".into()],
+            ..Config::default()
+        };
+        assert!(!cfg.backend_enabled(BackendKind::WindowsFeatureUpdate));
+    }
+
+    #[test]
+    fn ordinary_backends_need_no_opt_in() {
+        let cfg = Config::default();
+        for kind in [
+            BackendKind::Winget,
+            BackendKind::WindowsUpdate,
+            BackendKind::WindowsDefenderUpdate,
+            BackendKind::WindowsDrivers,
+        ] {
+            assert!(cfg.backend_enabled(kind), "{kind} should be on by default");
+        }
+    }
+
+    /// An existing user's config already has `disabled-backends: []` on disk.
+    /// Had feature upgrades been gated by a default entry in that list, this
+    /// case would silently enable them for everyone who ran an older build.
+    #[test]
+    fn an_existing_config_file_still_gates_feature_upgrades() {
+        let cfg: Config = serde_json::from_str(r#"{"disabled-backends": []}"#).unwrap();
+        assert!(!cfg.backend_enabled(BackendKind::WindowsFeatureUpdate));
     }
 }

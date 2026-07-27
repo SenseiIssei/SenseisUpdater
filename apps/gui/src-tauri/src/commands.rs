@@ -295,54 +295,15 @@ impl ConfigDto {
 
 // ── Helper conversions ───────────────────────────────────────────────────────
 
+/// Parse a backend id coming from the front-end.
+///
+/// This used to be a hand-written 46-arm match, a second copy of the mapping
+/// that `BackendKind::id` already owns. A kind added to the enum was simply
+/// missing here, so holding or unholding one of those packages failed with
+/// "unknown backend" until someone noticed. `from_id` searches
+/// `BackendKind::ALL`, which a test keeps exhaustive.
 fn backend_kind_from_str(s: &str) -> Option<BackendKind> {
-    match s {
-        "winget" => Some(BackendKind::Winget),
-        "msstore" => Some(BackendKind::MsStore),
-        "windows-drivers" => Some(BackendKind::WindowsDrivers),
-        "homebrew" => Some(BackendKind::Homebrew),
-        "softwareupdate" => Some(BackendKind::MacSoftwareUpdate),
-        "apt" => Some(BackendKind::Apt),
-        "dnf" => Some(BackendKind::Dnf),
-        "pacman" => Some(BackendKind::Pacman),
-        "flatpak" => Some(BackendKind::Flatpak),
-        "nvidia-gpu" => Some(BackendKind::NvidiaGpu),
-        "amd-gpu" => Some(BackendKind::AmdGpu),
-        "intel-gpu" => Some(BackendKind::IntelGpu),
-        "dell-command-update" => Some(BackendKind::DellCommandUpdate),
-        "hp-image-assistant" => Some(BackendKind::HpImageAssistant),
-        "lenovo-system-update" => Some(BackendKind::LenovoSystemUpdate),
-        "msi-center" => Some(BackendKind::MsiCenter),
-        "fwupd" => Some(BackendKind::Fwupd),
-        "mac-firmware" => Some(BackendKind::MacFirmware),
-        "snap" => Some(BackendKind::Snap),
-        "zypper" => Some(BackendKind::Zypper),
-        "chocolatey" => Some(BackendKind::Chocolatey),
-        "scoop" => Some(BackendKind::Scoop),
-        "nix" => Some(BackendKind::Nix),
-        "appimage" => Some(BackendKind::AppImage),
-        "asus-armoury" => Some(BackendKind::AsusArmoury),
-        "gigabyte-control-center" => Some(BackendKind::GigabyteControlCenter),
-        "acer-care-center" => Some(BackendKind::AcerCareCenter),
-        "razer-synapse" => Some(BackendKind::RazerSynapse),
-        "qualcomm-gpu" => Some(BackendKind::QualcommGpu),
-        "virtualization-guest" => Some(BackendKind::VirtualizationGuest),
-        "pip" => Some(BackendKind::Pip),
-        "cargo" => Some(BackendKind::Cargo),
-        "npm" => Some(BackendKind::Npm),
-        "go" => Some(BackendKind::Go),
-        "dotnet-tool" => Some(BackendKind::DotnetTool),
-        "vscode-extension" => Some(BackendKind::VscodeExtension),
-        "powershell-module" => Some(BackendKind::PowerShellModule),
-        "nvidia-geforce-experience" => Some(BackendKind::NvidiaGeForceExperience),
-        "intel-dsa" => Some(BackendKind::IntelDsa),
-        "jetbrains-plugin" => Some(BackendKind::JetbrainsPlugin),
-        "windows-optional-feature" => Some(BackendKind::WindowsOptionalFeature),
-        "dell-firmware" => Some(BackendKind::DellFirmware),
-        "hp-firmware" => Some(BackendKind::HpFirmware),
-        "lenovo-firmware" => Some(BackendKind::LenovoFirmware),
-        _ => None,
-    }
+    BackendKind::from_id(s)
 }
 
 // ── Tauri commands ───────────────────────────────────────────────────────────

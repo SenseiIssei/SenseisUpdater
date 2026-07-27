@@ -16,6 +16,12 @@ pub enum BackendKind {
     MsStore,
     /// Windows: driver and firmware updates via Windows Update.
     WindowsDrivers,
+    /// Windows: security and quality updates via the Windows Update Agent.
+    WindowsUpdate,
+    /// Windows: Microsoft Defender signature updates.
+    WindowsDefenderUpdate,
+    /// Windows: version upgrades and service packs. Opt-in only.
+    WindowsFeatureUpdate,
     /// macOS: Homebrew formulae and casks.
     Homebrew,
     /// macOS: `softwareupdate` system updates.
@@ -101,12 +107,85 @@ pub enum BackendKind {
 }
 
 impl BackendKind {
+    /// Every backend kind that exists, on any platform.
+    ///
+    /// This is the list [`BackendKind::from_id`] searches, and it exists so
+    /// that front-ends do not each keep their own copy. The Tauri layer used
+    /// to carry a hand-written `&str -> BackendKind` match; a kind added to
+    /// this enum was simply absent from it, and holding or unholding such a
+    /// package failed with "unknown backend" until somebody noticed.
+    ///
+    /// Kept in step with [`BackendKind::id`] by
+    /// `every_kind_is_listed_in_all`, which fails if the two ever diverge.
+    pub const ALL: &'static [BackendKind] = &[
+        BackendKind::Winget,
+        BackendKind::MsStore,
+        BackendKind::WindowsDrivers,
+        BackendKind::WindowsUpdate,
+        BackendKind::WindowsDefenderUpdate,
+        BackendKind::WindowsFeatureUpdate,
+        BackendKind::Homebrew,
+        BackendKind::MacSoftwareUpdate,
+        BackendKind::Apt,
+        BackendKind::Dnf,
+        BackendKind::Pacman,
+        BackendKind::Flatpak,
+        BackendKind::NvidiaGpu,
+        BackendKind::AmdGpu,
+        BackendKind::IntelGpu,
+        BackendKind::DellCommandUpdate,
+        BackendKind::HpImageAssistant,
+        BackendKind::LenovoSystemUpdate,
+        BackendKind::MsiCenter,
+        BackendKind::Fwupd,
+        BackendKind::MacFirmware,
+        BackendKind::Snap,
+        BackendKind::Zypper,
+        BackendKind::Chocolatey,
+        BackendKind::Scoop,
+        BackendKind::Nix,
+        BackendKind::AppImage,
+        BackendKind::AsusArmoury,
+        BackendKind::GigabyteControlCenter,
+        BackendKind::AcerCareCenter,
+        BackendKind::RazerSynapse,
+        BackendKind::QualcommGpu,
+        BackendKind::VirtualizationGuest,
+        BackendKind::Pip,
+        BackendKind::Cargo,
+        BackendKind::Npm,
+        BackendKind::Go,
+        BackendKind::DotnetTool,
+        BackendKind::VscodeExtension,
+        BackendKind::PowerShellModule,
+        BackendKind::NvidiaGeForceExperience,
+        BackendKind::IntelDsa,
+        BackendKind::JetbrainsPlugin,
+        BackendKind::WindowsOptionalFeature,
+        BackendKind::DellFirmware,
+        BackendKind::HpFirmware,
+        BackendKind::LenovoFirmware,
+    ];
+
+    /// Parse the [`id`](BackendKind::id) form back into a kind.
+    ///
+    /// Case-insensitive, because config files are written by hand.
+    pub fn from_id(id: &str) -> Option<BackendKind> {
+        BackendKind::ALL
+            .iter()
+            .copied()
+            .find(|k| k.id().eq_ignore_ascii_case(id.trim()))
+    }
+
     /// Stable machine-readable name, used in config files and the CLI.
     pub fn id(&self) -> &'static str {
         match self {
             BackendKind::Winget => "winget",
             BackendKind::MsStore => "msstore",
             BackendKind::WindowsDrivers => "windows-drivers",
+            BackendKind::WindowsUpdate => "windows-update",
+            BackendKind::WindowsDefenderUpdate => "windows-defender-update",
+            BackendKind::WindowsFeatureUpdate => "windows-feature-update",
             BackendKind::Homebrew => "homebrew",
             BackendKind::MacSoftwareUpdate => "softwareupdate",
             BackendKind::Apt => "apt",
@@ -155,6 +234,9 @@ impl BackendKind {
     pub fn requires_elevation(&self) -> bool {
         match self {
             BackendKind::WindowsDrivers
+            | BackendKind::WindowsUpdate
+            | BackendKind::WindowsDefenderUpdate
+            | BackendKind::WindowsFeatureUpdate
             | BackendKind::Apt
             | BackendKind::Dnf
             | BackendKind::Pacman
@@ -210,6 +292,24 @@ impl BackendKind {
             self,
             BackendKind::MsStore | BackendKind::Homebrew | BackendKind::Scoop
         )
+    }
+
+    /// Whether this backend participates in a run the user has not configured.
+    ///
+    /// Almost everything does — the point of the tool is that it works out of
+    /// the box. The exception is a backend whose updates change the machine in
+    /// a way no background process should decide on: a Windows version upgrade
+    /// replaces the operating system, takes an hour, and cannot be undone
+    /// without the previous build still being on disk.
+    ///
+    /// This is deliberately *not* expressed as an entry in the default
+    /// `disabled-backends` list. That list is serialised into every user's
+    /// config file, so a default added later would never reach anyone who had
+    /// already run the tool once. A method on the kind applies to everybody,
+    /// including existing installs, and the user opts in by name through
+    /// `enabled-backends`.
+    pub fn enabled_by_default(&self) -> bool {
+        !matches!(self, BackendKind::WindowsFeatureUpdate)
     }
 }
 
@@ -412,6 +512,97 @@ impl PlannedUpdate {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Fails to compile when a variant is added to [`BackendKind`].
+    ///
+    /// `ALL` cannot be derived without a macro or a dependency, so the next
+    /// best thing is to make forgetting it impossible to miss: this match is
+    /// exhaustive, so a new variant breaks the build here, three lines from
+    /// the assertion that `ALL` must contain it.
+    fn assert_variant_is_known(kind: BackendKind) {
+        match kind {
+            BackendKind::Winget
+            | BackendKind::MsStore
+            | BackendKind::WindowsDrivers
+            | BackendKind::WindowsUpdate
+            | BackendKind::WindowsDefenderUpdate
+            | BackendKind::WindowsFeatureUpdate
+            | BackendKind::Homebrew
+            | BackendKind::MacSoftwareUpdate
+            | BackendKind::Apt
+            | BackendKind::Dnf
+            | BackendKind::Pacman
+            | BackendKind::Flatpak
+            | BackendKind::NvidiaGpu
+            | BackendKind::AmdGpu
+            | BackendKind::IntelGpu
+            | BackendKind::DellCommandUpdate
+            | BackendKind::HpImageAssistant
+            | BackendKind::LenovoSystemUpdate
+            | BackendKind::MsiCenter
+            | BackendKind::Fwupd
+            | BackendKind::MacFirmware
+            | BackendKind::Snap
+            | BackendKind::Zypper
+            | BackendKind::Chocolatey
+            | BackendKind::Scoop
+            | BackendKind::Nix
+            | BackendKind::AppImage
+            | BackendKind::AsusArmoury
+            | BackendKind::GigabyteControlCenter
+            | BackendKind::AcerCareCenter
+            | BackendKind::RazerSynapse
+            | BackendKind::QualcommGpu
+            | BackendKind::VirtualizationGuest
+            | BackendKind::Pip
+            | BackendKind::Cargo
+            | BackendKind::Npm
+            | BackendKind::Go
+            | BackendKind::DotnetTool
+            | BackendKind::VscodeExtension
+            | BackendKind::PowerShellModule
+            | BackendKind::NvidiaGeForceExperience
+            | BackendKind::IntelDsa
+            | BackendKind::JetbrainsPlugin
+            | BackendKind::WindowsOptionalFeature
+            | BackendKind::DellFirmware
+            | BackendKind::HpFirmware
+            | BackendKind::LenovoFirmware => {}
+        }
+        assert!(
+            BackendKind::ALL.contains(&kind),
+            "{kind} is missing from BackendKind::ALL"
+        );
+    }
+
+    #[test]
+    fn every_kind_is_listed_in_all() {
+        for kind in BackendKind::ALL {
+            assert_variant_is_known(*kind);
+        }
+    }
+
+    #[test]
+    fn every_id_is_unique() {
+        let mut ids: Vec<&str> = BackendKind::ALL.iter().map(|k| k.id()).collect();
+        let total = ids.len();
+        ids.sort_unstable();
+        ids.dedup();
+        assert_eq!(ids.len(), total, "two backend kinds share an id");
+    }
+
+    #[test]
+    fn ids_round_trip_through_from_id() {
+        for kind in BackendKind::ALL {
+            assert_eq!(BackendKind::from_id(kind.id()), Some(*kind));
+        }
+        // Config files are hand-edited, so parsing tolerates case and padding.
+        assert_eq!(
+            BackendKind::from_id("  Windows-Update "),
+            Some(BackendKind::WindowsUpdate)
+        );
+        assert_eq!(BackendKind::from_id("not-a-backend"), None);
+    }
 
     #[test]
     fn valid_package_ids_pass_validation() {

@@ -43,6 +43,8 @@ pub mod virtualization_guest;
 #[cfg(windows)]
 pub mod windows_drivers;
 #[cfg(windows)]
+pub mod windows_update;
+#[cfg(windows)]
 pub mod winget;
 pub mod zypper;
 
@@ -64,6 +66,11 @@ fn all_backends() -> Vec<Box<dyn Backend>> {
         v.push(Box::new(winget::WingetBackend::new()));
         v.push(Box::new(winget::WingetBackend::store()));
         v.push(Box::new(windows_drivers::WindowsDriverBackend::new()));
+        v.push(Box::new(windows_update::WindowsUpdateBackend::new()));
+        v.push(Box::new(windows_update::WindowsUpdateBackend::defender()));
+        v.push(Box::new(
+            windows_update::WindowsUpdateBackend::feature_upgrades(),
+        ));
         v.push(Box::new(gpu::nvidia_gpu::NvidiaGpuBackend::new()));
         v.push(Box::new(gpu::amd_gpu::AmdGpuBackend::new()));
         v.push(Box::new(gpu::intel_gpu::IntelGpuBackend::new()));
@@ -215,6 +222,9 @@ mod tests {
             assert!(kinds.contains(&BackendKind::Winget));
             assert!(kinds.contains(&BackendKind::MsStore));
             assert!(kinds.contains(&BackendKind::WindowsDrivers));
+            assert!(kinds.contains(&BackendKind::WindowsUpdate));
+            assert!(kinds.contains(&BackendKind::WindowsDefenderUpdate));
+            assert!(kinds.contains(&BackendKind::WindowsFeatureUpdate));
             assert!(kinds.contains(&BackendKind::NvidiaGpu));
             assert!(kinds.contains(&BackendKind::AmdGpu));
             assert!(kinds.contains(&BackendKind::IntelGpu));

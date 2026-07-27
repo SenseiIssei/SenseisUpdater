@@ -73,8 +73,8 @@ npx tauri dev
 |:------:|:-----:|
 | Language | Rust + TypeScript |
 | Crates | 5 |
-| Unit Tests | 439 |
-| Backends | 6 (winget, msstore, Windows Drivers, Homebrew, apt, Flatpak) |
+| Unit Tests | 487 |
+| Backends | 47 across three platforms (39 on Windows) |
 | Binary Size | ~1 MB (CLI) |
 | Platforms | Windows, macOS, Linux |
 | GUI Framework | Tauri v2 + React 19 |
@@ -141,11 +141,20 @@ The original Python updater had four defects that could corrupt installations:
 
 ## Features
 
-- **Six backends**: winget, Microsoft Store, Windows Drivers (COM API), Homebrew, apt, Flatpak
+- **47 backends** across Windows, macOS and Linux:
+  - *Windows Update*: security & quality updates, Defender definitions,
+    drivers, and feature upgrades (opt-in) via the Windows Update Agent COM API
+  - *Windows packages*: winget, Microsoft Store, Chocolatey, Scoop
+  - *GPU drivers*: NVIDIA, AMD, Intel, Qualcomm
+  - *OEM tools*: Dell, HP, Lenovo, MSI, ASUS, Gigabyte, Acer, Razer
+  - *Firmware*: Dell, HP, Lenovo, `fwupd`, Mac firmware
+  - *Language ecosystems*: pip, cargo, npm, go, dotnet tools, VS Code
+    extensions, JetBrains plugins, PowerShell modules
+  - *Unix*: Homebrew, apt, dnf, pacman, zypper, snap, flatpak, nix, AppImage
 - **Safety policy**: stable-only by default, semver version comparison, holds/pins, exclusions, elevation rules
-- **Verification**: installer digest verification and signature checking (`odysync-verify` crate)
 - **Restore points**: system restore point before applying (Windows)
 - **Maintenance**: temp cleanup, recycle bin, DISM/SFC, startup programs
+- **Security audit**: Defender, persistence, integrity, network and hardening
 - **Scheduling**: Task Scheduler (Windows), launchd (macOS), systemd (Linux)
 - **Diagnostics**: zip bundle for troubleshooting
 - **GUI**: Tauri v2 + React + TypeScript + TailwindCSS desktop app with dark/light mode
@@ -257,6 +266,15 @@ cargo fmt --all -- --check
 - `cargo-audit` and `cargo-deny` run on every CI build
 - CycloneDX SBOM generated per build
 - SHA-256 checksums published for every release artifact
+
+Two things this list does **not** yet claim, stated plainly because the
+previous version of it did:
+
+- The `odysync-verify` crate exists but has no call sites — installer digests
+  and Authenticode signatures are not currently checked on the apply path.
+  Wiring it in is Phase C of [PLAN.md](PLAN.md).
+- Odysync's own releases are unsigned, so SmartScreen warns on every install.
+  Phase F.
 
 ---
 

@@ -17,6 +17,7 @@ pub mod restore;
 pub mod runner;
 pub mod scan_cache;
 pub mod version;
+pub mod windows_update;
 
 pub use backend::{ApplyPhase, ApplyProgress, Backend};
 pub use config::Config;
@@ -34,3 +35,4 @@ pub use restore::RestorePointGuard;
 pub use runner::{ProgressEmitter, ProgressEvent, Runner};
 pub use scan_cache::ScanCache;
 pub use version::Version;
+pub use windows_update::UpdateClass;

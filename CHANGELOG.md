@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Windows Update.** Odysync now installs Windows' own security, quality and
+  Defender updates, not just drivers. Three backends over one shared Windows
+  Update Agent wrapper: `windows-update` (security and quality),
+  `windows-defender-update` (definitions) and `windows-feature-update`
+  (version upgrades). Updates are classified by category **GUID**, never by
+  name, because category names are localised.
+- Feature upgrades are **off until opted into** by name in `enabled-backends`.
+  Gating them through `BackendKind::enabled_by_default` rather than a default
+  `disabled-backends` entry means the gate also applies to config files
+  written by earlier versions.
+- `BackendKind::ALL` and `BackendKind::from_id`, replacing the hand-written
+  46-arm id match in the Tauri layer. A test keeps the list exhaustive.
+
+### Fixed
+- **No driver could ever be installed.** The driver backend set
+  `available = Version::parse("{update_guid}.{revision}")`, which collapses to
+  the GUID's first block and parses as `Version::Unknown`. The policy engine
+  blocks unknown versions and `apply` refused them outright, so drivers were
+  listed and never installable. Windows updates now carry an orderable
+  `0` → revision pair instead.
+- **Driver installs never downloaded and never accepted a EULA.** The install
+  path went straight from `SetUpdates` to `Install`, which fails with
+  `WU_E_NOT_DOWNLOADED` unless Windows had already cached the update.
+- **A failed search discarded valid results.** `orcFailed` was treated as "no
+  updates", but the Windows Update Agent returns that code alongside a
+  populated collection when one source in the aggregate fails. On the machine
+  this was found on, that meant throwing away 17 pending updates.
+- **Windows Update appeared to require elevation, and did not.** The WUA
+  backends activated the COM object with `CLSCTX_LOCAL_SERVER`, forcing
+  out-of-process activation that an unelevated caller may not perform —
+  `E_ACCESSDENIED`. With `CLSCTX_ALL` the search runs unelevated, so an
+  ordinary user now sees pending security updates and the reason they cannot
+  be applied yet, instead of an empty page.
+- **`RunReport::reboot_required` was never set to `true`.** It had three
+  display sites in the GUI, one in the CLI renderer, and no assignment
+  anywhere. The runner now asks the OS through `platform::reboot_pending`,
+  which covers every backend rather than only the one that installed.
+- **The npm and VS Code backends never worked on Windows.** `CreateProcess`
+  only appends `.exe` when searching `PATH`; npm ships as `npm.cmd` and the VS
+  Code CLI as `code.cmd`, so both reported themselves unavailable on every
+  Windows host. `proc::resolve_program` now walks `PATH` against `PATHEXT`
+  without routing through a shell.
+- Duplicate Windows Update offerings — the same Defender signature listed once
+  per servicing channel — are deduplicated on identity.
+- The GUI lockfile version, which had drifted to `2.0.0-alpha.1` against a
+  `2.1.0` `package.json`.
+
 ### Removed
 - The v1 Python implementation (`legacy/`, 23 files). The Rust CLI has had
   feature parity since Phase 2, and this was the last open item on the

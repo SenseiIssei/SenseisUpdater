@@ -109,7 +109,27 @@ features, because they are trust claims.
    `IInstallationResult::RebootRequired()`. Three "a reboot is required"
    banners exist that can never appear.
 
-8. **~~The npm and VS Code backends never worked on Windows.~~ Fixed.**
+8. **The driver backend has never been able to install a driver.** This is the
+   worst of them. `scan_drivers_com` sets
+   `available = Version::parse("{update_guid}.{revision}")`. `Version::parse`
+   splits at the first `-` that follows a digit, so the whole version reduces
+   to the GUID's first block — `22cb1a63` — which has no numeric segment and
+   therefore parses to `Version::Unknown`. Verified by running the real parser
+   over real-shaped IDs: 3 of 4 sample GUIDs came back `is_known=false`, the
+   fourth only because its first block happened to be all digits.
+
+   The consequences compound. The policy engine blocks every driver candidate
+   with `UnknownAvailableVersion`, and even with `require_known_versions`
+   turned off, `WindowsDriverBackend::apply` refuses outright on
+   `!candidate.available.is_known()`. So the entire Driver Booster half of the
+   product — the Hardware page, the driver scan, the apply button — can list
+   updates and can never install one.
+
+   Fix: Windows updates have no meaningful installed-version to compare
+   against. Model them honestly as `0` → `revision`, which is a real ordered
+   pair, and let the KB number and title carry the identity.
+
+9. **~~The npm and VS Code backends never worked on Windows.~~ Fixed.**
    `proc::build` called `Command::new("npm")`, and `CreateProcess` only ever
    appends `.exe` when searching `PATH`. npm ships as `npm.cmd` and VS Code's
    CLI as `code.cmd`, so both backends reported `is_available() == false` on
@@ -146,49 +166,56 @@ Nothing new is built until the existing thing is proven.
 
 **Exit:** we know exactly what works, from evidence rather than documentation.
 
-### Phase B — Windows Update (2–3 days) — *the headline gap*
+### Phase B — Windows Update — *the headline gap* — **largely done**
 
-New `BackendKind::WindowsUpdate`, next to `WindowsDrivers`, sharing one WUA
-COM wrapper.
+- [x] COM plumbing extracted from `windows_drivers.rs` into
+      `windows_update/session.rs`, shared by all four WUA backends. Defects
+      6, 7 and 8 are fixed there, for drivers and software at once: an
+      `IUpdateDownloader` pass before `Install`, `AcceptEula()` before the
+      download, `RebootRequired` no longer discarded, and an orderable version
+      pair instead of a GUID that parsed to `Unknown`.
+- [x] Search `IsInstalled=0 and Type='Software' and IsHidden=0`, classified by
+      **category GUID, never by name** — category names are localised.
+      Verified against a live German machine: 14 pending updates, and their
+      GUIDs matched the constants.
+- [x] Three backends rather than one switch: `windows-update` (security +
+      quality), `windows-defender-update` (definitions),
+      `windows-feature-update` (version upgrades). The split falls out of the
+      existing architecture — the CLI, the GUI, holds, pins and profiles pick
+      it up with no front-end change.
+- [x] **Feature upgrades are opt-in**, via `BackendKind::enabled_by_default`
+      rather than a default `disabled-backends` entry. A default list entry
+      would never reach a user whose config file was written by an older
+      build; a method on the kind applies to everyone.
+- [x] `apply` re-checks the class against a fresh search rather than trusting
+      the candidate handed back across the GUI's process boundary, so the
+      security backend can never be talked into installing an upgrade.
+- [x] Reboot state read from the OS (`platform::reboot_pending`) rather than
+      from one backend's install result, so it covers every backend including
+      a winget installer that queued a pending file rename.
+- [x] `explain_hresult` turns the codes that actually occur into sentences —
+      "another installation is already in progress", "this needs to run
+      elevated" — instead of a bare `0x80240016`.
+- [x] Verified end to end, unelevated: 3 driver updates and 13 Windows updates
+      listed, each with `requires administrator privileges` as its inline skip
+      reason. Before this work, none of them appeared at all.
 
-- [ ] Extract the COM plumbing from `windows_drivers.rs` into
-      `windows_update/session.rs` behind a small trait, so both backends use
-      it and so the search/install logic becomes unit-testable with a fake.
-      **This is also where defects 6 and 7 get fixed**, for both backends at
-      once: an `IUpdateDownloader` pass before `Install`, `AcceptEula()` on
-      confirmed updates, and `IInstallationResult::RebootRequired()` wired
-      through to `RunReport::reboot_required`.
-- [ ] Search `IsInstalled=0 AND Type='Software'`, then classify each update by
-      its categories: **Security**, **Critical**, **Definition** (Defender),
-      **Quality/Cumulative**, **Feature upgrade**, **Optional/Preview**.
-- [ ] Policy per class, in `odysync-core::policy` where every other safety rule
-      lives:
-      - Security + Critical: eligible by default.
-      - Definition updates: eligible, fast path, no restore point (they are
-        replaced hourly; a restore point per definition is absurd).
-      - Quality/Cumulative: eligible, restore point first.
-      - **Feature upgrades: opt-in only.** Never in an unattended run.
-      - Preview/Optional: refused by default.
-- [ ] EULA handling: `AcceptEula()` only for updates the user confirmed.
-- [ ] Reboot: propagate `RunReport::reboot_required`, detect an already-pending
-      reboot (`CBS\RebootPending`, `WindowsUpdate\Auto Update\RebootRequired`,
-      `PendingFileRenameOperations`) and refuse to stack a second batch on top
-      of one.
-- [ ] Deferral, like Windows itself: hold a single KB, or pause all Windows
-      updates for N days. Reuses the existing hold/pin config syntax
-      (`windows-update:KB5034123`).
-- [ ] Elevation: reuse the existing model. WUA install needs admin; the backend
-      already reports `is_available() == false` unelevated, which is the right
-      shape — carry it over.
-- [ ] GUI: Windows Update gets its own card on the Updates page with the class
-      breakdown, plus a "restart now / restart later" affordance.
+Remaining:
 
-**Exit:** `odysync scan` lists pending Windows security updates; `odysync apply`
-installs them; reboot state is reported honestly.
+- [ ] Deferral: pause all Windows updates for N days. Per-KB holds already work
+      through the existing syntax (`windows-update:<guid>.<rev>`), but a KB
+      number is the handle a user actually knows — `windows-update:KB5101650`
+      should resolve too.
+- [ ] GUI: a dedicated Windows Update card with the class breakdown and a
+      "restart now / later" affordance. They currently appear in the generic
+      updates list, which works but buries the distinction.
+- [ ] Install has not been exercised: it needs elevation, and an elevated run
+      was out of reach here. The scan half is verified against the real API;
+      the install half is verified only by construction and unit tests.
 
 **Risk:** WUA is a COM API with real failure modes (WSUS-managed machines,
-policy-blocked updates, `0x80240438`). Each error path must produce a message
-the user can act on, not a HRESULT.
+policy-blocked updates). `explain_hresult` covers the common ones; the rest
+still surface their raw code, which is better than silence.
 
 ### Phase C — Make the safety claims true (1–2 days)
 
