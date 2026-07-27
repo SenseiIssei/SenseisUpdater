@@ -20,6 +20,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   written by earlier versions.
 - `BackendKind::ALL` and `BackendKind::from_id`, replacing the hand-written
   46-arm id match in the Tauri layer. A test keeps the list exhaustive.
+- `odysync backends` now names **who** verifies each backend's payloads —
+  winget, apt, the Windows Update Agent — instead of implying Odysync did.
+  Odysync almost never holds an installer file: the package manager downloads
+  and validates it inside its own process. AppImage is reported as *not
+  verified*, with the reason.
+- Dependabot for cargo, npm and GitHub Actions, grouped weekly.
+- `npm audit --audit-level=moderate` in the GUI CI job. Rust dependencies were
+  audited by `cargo-audit` and `cargo-deny`; the 116 npm packages were not
+  audited at all.
+
+### Security
+- **The offline cache refused nothing.** `download_and_cache` accepted an
+  arbitrary URL from the front-end, including plaintext `http://`, where an
+  installer can be replaced in transit — and `expected_sha256` is optional, so
+  often nothing would have caught the swap. It is now HTTPS-only, and other
+  schemes are refused.
+- The offline cache is now the first real call site of `odysync-verify`. A
+  download is staged under a `.partial` name, its Authenticode signature is
+  checked, and only then is it moved into place. An **invalid** signature
+  deletes the file and fails the download; unsigned is allowed but recorded in
+  the manifest as `CachedSignature::Unsigned` rather than passing silently.
+- A malformed `expected_sha256` is rejected as a caller error instead of
+  degrading into an ordinary "digest did not match".
 
 ### Fixed
 - **No driver could ever be installed.** The driver backend set

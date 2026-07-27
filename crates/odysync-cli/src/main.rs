@@ -265,6 +265,7 @@ async fn run(cli: Cli) -> Result<u8> {
                         serde_json::json!({
                             "id": b.kind().id(),
                             "name": b.display_name(),
+                            "verification": odysync_core::verification_of(b.kind()),
                         })
                     })
                     .collect();
@@ -274,7 +275,17 @@ async fn run(cli: Cli) -> Result<u8> {
             } else {
                 println!("{}", style.bold("Detected package managers\n"));
                 for b in &backends {
-                    println!("  {:<16}  {}", b.kind().id(), b.display_name());
+                    // Naming who verifies the payload, rather than showing a
+                    // tick that could be read as "Odysync checked this". It
+                    // does not: the payload is downloaded and validated inside
+                    // the package manager's own process.
+                    let verification = odysync_core::verification_of(b.kind());
+                    println!(
+                        "  {:<24}  {:<38}  {}",
+                        b.kind().id(),
+                        b.display_name(),
+                        style.dim(&verification.label()),
+                    );
                 }
                 println!(
                     "\n{}",

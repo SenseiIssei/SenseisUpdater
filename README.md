@@ -267,14 +267,17 @@ cargo fmt --all -- --check
 - CycloneDX SBOM generated per build
 - SHA-256 checksums published for every release artifact
 
-Two things this list does **not** yet claim, stated plainly because the
-previous version of it did:
+- The offline cache downloads over **HTTPS only**, checks the Authenticode
+  signature before the file is kept, and refuses a signature that does not
+  validate
+- `odysync backends` names **who** verified each payload — winget, apt, the
+  Windows Update Agent — rather than showing a tick that could be misread as a
+  check Odysync performed. Odysync almost never holds an installer file; the
+  package manager downloads and validates it inside its own process.
 
-- The `odysync-verify` crate exists but has no call sites — installer digests
-  and Authenticode signatures are not currently checked on the apply path.
-  Wiring it in is Phase C of [PLAN.md](PLAN.md).
-- Odysync's own releases are unsigned, so SmartScreen warns on every install.
-  Phase F.
+One thing this list does **not** claim, stated plainly because the previous
+version of it did: Odysync's own releases are unsigned, so SmartScreen warns on
+every install. That is Phase F of [PLAN.md](PLAN.md).
 
 ---
 

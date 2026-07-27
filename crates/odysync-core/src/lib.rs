@@ -16,6 +16,7 @@ pub mod report;
 pub mod restore;
 pub mod runner;
 pub mod scan_cache;
+pub mod verification;
 pub mod version;
 pub mod windows_update;
 
@@ -34,5 +35,6 @@ pub use report::RunReport;
 pub use restore::RestorePointGuard;
 pub use runner::{ProgressEmitter, ProgressEvent, Runner};
 pub use scan_cache::ScanCache;
+pub use verification::{verification_of, Verification};
 pub use version::Version;
 pub use windows_update::UpdateClass;

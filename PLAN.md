@@ -217,23 +217,52 @@ Remaining:
 policy-blocked updates). `explain_hresult` covers the common ones; the rest
 still surface their raw code, which is better than silence.
 
-### Phase C — Make the safety claims true (1–2 days)
+### Phase C — Make the safety claims true — **done**
 
-- [ ] Wire `odysync-verify` into the apply path in `odysync-core::runner`, so
-      **no backend can opt out**: any backend that hands us a downloaded
-      installer path gets its digest and Authenticode signature checked before
-      execution. Backends that never touch a file (winget, apt) pass through
-      explicitly and say so in the report.
-- [ ] Publisher allow-list: an installer signed by an unexpected publisher is
-      refused, not warned about.
-- [ ] Where verification genuinely cannot happen (winget hides its manifest
-      hashes — `ROADMAP.md` known gap 2), the report must say
-      "verified by winget, not by us" rather than showing a green tick.
-- [ ] Add `npm audit --audit-level=moderate` to the `gui` CI job. Rust deps are
-      audited; the 116 npm packages are not.
-- [ ] Enable Dependabot or Renovate for both `Cargo.toml` and `package.json`.
+The plan for this phase was wrong, and finding out why was the useful part.
 
-**Exit:** every green "verified" in the UI corresponds to a check that ran.
+It assumed backends hand the runner a downloaded installer path that the runner
+could then verify. **No backend does.** Odysync asks winget, apt, Homebrew or
+the Windows Update Agent to perform the update; those tools download, verify
+and execute the payload inside their own process, and no file ever exists at a
+path we control. Wiring `odysync-verify` into the runner would have produced a
+hook that never fires.
+
+There is exactly one place Odysync downloads an executable itself — the offline
+cache — and that is where the crate belongs.
+
+- [x] **The offline cache is now the real call site.** `download_and_cache`
+      writes to a `.partial` staging name, runs `odysync_verify::verify_signature`
+      on it, and only renames it into place if it passes. A file whose
+      signature is *invalid* is deleted and the download fails: unsigned is a
+      state the world is genuinely in, but a signature that does not validate
+      means the bytes changed after signing or the certificate was revoked.
+- [x] **HTTPS only.** `download_and_cache` took an arbitrary URL from the
+      front-end and would happily fetch an installer over plaintext `http://`,
+      where it can be swapped in transit — and `expected_sha256` is optional,
+      so frequently nothing would have caught the swap. `file://` and other
+      schemes are refused too.
+- [x] A malformed `expected_sha256` is now rejected as a caller bug rather than
+      silently degrading to "does not match".
+- [x] The signature verdict is **recorded in the manifest** (`CachedSignature`),
+      with `#[serde(default)]` so older manifests still load and read as
+      `Unknown` — honest, since nothing looked at them.
+- [x] **`odysync_core::verification_of`** answers "who checked this?" for all
+      47 backends, and `odysync backends` prints it: *verified by winget*,
+      *verified by the Windows Update Agent*, *verified by apt*. AppImage is
+      reported as **not verified**, with the reason. A test asserts no backend's
+      text can be read as "Odysync verified it".
+- [x] `npm audit --audit-level=moderate` added to the `gui` CI job.
+- [x] Dependabot configured for cargo, npm and GitHub Actions — grouped weekly
+      so the PRs are reviewable rather than ignored.
+
+Deliberately **not** done: a publisher allow-list. With no installer to inspect
+on the apply path, the only place it could apply is the offline cache, and an
+allow-list of one is a configuration burden rather than a control. Revisit if a
+backend ever downloads its own payload.
+
+**Exit:** every verification statement in the UI names who performed the check,
+and the one file Odysync fetches itself is actually checked.
 
 ### Phase D — Driver safety: backup and rollback (2 days)
 

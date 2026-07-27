@@ -112,6 +112,14 @@ jobs:
         working-directory: apps/gui
         run: npm ci
 
+      # Rust dependencies are audited by the `audit` and `deny` jobs; the 116
+      # npm packages the GUI pulls in were not audited at all. Runs once, on
+      # Linux, because the advisory database does not vary by runner OS.
+      - name: Audit frontend dependencies
+        if: runner.os == 'Linux'
+        working-directory: apps/gui
+        run: npm audit --audit-level=moderate
+
       - name: Typecheck
         working-directory: apps/gui
         run: npx tsc -b
