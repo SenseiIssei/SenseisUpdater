@@ -123,6 +123,13 @@ enum Command {
         backend: String,
     },
 
+    /// Check whether a newer Odysync has been released.
+    ///
+    /// Reports only. Odysync will not download and run its own updates while
+    /// its releases are unsigned — that is the supply-chain hole the v1
+    /// rewrite existed to close.
+    SelfCheck,
+
     /// Show the resolved configuration and where it lives.
     Config,
 
@@ -180,6 +187,13 @@ enum Command {
         /// Run a single check and exit (for testing or scheduled invocations).
         #[arg(long)]
         once: bool,
+
+        /// Keep scanning while the machine is on battery.
+        ///
+        /// Off by default: a scan spawns one process per detected backend, and
+        /// doing that hourly on battery drains a laptop for no benefit.
+        #[arg(long)]
+        on_battery: bool,
     },
 
     /// Back up and restore the Windows driver store.
@@ -564,6 +578,41 @@ async fn run(cli: Cli) -> Result<u8> {
             Ok(0)
         }
 
+        Command::SelfCheck => {
+            let check = odysync_backends::self_update::check(config.proxy_url.as_deref()).await?;
+
+            if cli.json {
+                println!("{}", serde_json::to_string_pretty(&check)?);
+                return Ok(0);
+            }
+
+            match (&check.latest, check.is_newer) {
+                (Some(latest), true) => {
+                    println!(
+                        "{} {} is available; you are running {}.",
+                        style.bold("Update:"),
+                        latest,
+                        check.current
+                    );
+                    if let Some(url) = &check.release_url {
+                        println!("  {url}");
+                    }
+                    if let Some(sha) = &check.installer_sha256 {
+                        println!("  checksum: {sha}");
+                    }
+                    if let Some(reason) = &check.not_installable_reason {
+                        println!("\n{}", style.dim(reason));
+                    }
+                }
+                (Some(latest), false) => println!(
+                    "Up to date: running {}, latest published is {latest}.",
+                    check.current
+                ),
+                (None, _) => println!("Could not determine the latest release."),
+            }
+            Ok(0)
+        }
+
         Command::Config => {
             if cli.json {
                 println!("{}", serde_json::to_string_pretty(&config)?);
@@ -680,12 +729,14 @@ async fn run(cli: Cli) -> Result<u8> {
             apply,
             restore_point,
             once,
+            on_battery,
         } => {
             let opts = daemon::DaemonOpts {
                 interval_minutes: interval,
                 auto_apply: apply,
                 restore_point,
                 once,
+                on_battery,
             };
             let code = daemon::run(&opts, &config_path).await?;
             Ok(code)

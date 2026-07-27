@@ -400,20 +400,47 @@ The Recycle Bin case is worth recording: the obvious PowerShell check
   that could be verified properly here. Left open rather than shipped
   unverified.
 
-### Phase F — Ship it properly (1 day of work, weeks of lead time)
+### Phase F — Ship it properly — **code done, procurement open**
 
-- [ ] **Code signing.** Azure Trusted Signing is ~10 USD/month and the only
-      practical route for an individual publisher; the alternative is an EV
-      certificate at 300–500 USD/year. Without it, SmartScreen flags every
-      release. Start this first — validation takes days, not minutes.
-- [ ] Sign the NSIS installer and both binaries in `release.yml`.
-- [ ] Self-update that verifies its own signature before applying
-      (Tauri updater plugin + a signed `latest.json`).
-- [ ] Publish a winget manifest for Odysync itself. A tool that updates
-      software should be installable with `winget install Odysync`.
-- [ ] Idle/AC awareness in the daemon; measure idle RSS against the 15 MB
-      target in `ROADMAP.md` rather than assuming it.
-- [ ] Tag `v2.2.0`, write the release notes.
+- [x] **Signing wired into `release.yml`**, for both the CLI binaries and the
+      NSIS installer, with an RFC 3161 timestamp. Gated on a `SIGNING_ENABLED`
+      repository variable so the workflow keeps working today and starts
+      signing the moment the credentials exist — rather than being a separate
+      change somebody has to remember at the same moment the validation clears.
+- [x] `docs/SIGNING.md`: why it matters more than the friction suggests, the
+      certificate comparison, the exact variables and secrets to set, how to
+      verify a signed artifact, and what order to do things in afterwards.
+- [x] **SHA-256 published for the installer**, not only the CLI archives.
+- [x] **winget manifests generated per release** into a CI artifact, ready to
+      submit to `microsoft/winget-pkgs`.
+- [x] **`odysync self-check`** — reports a newer release, compares with the
+      policy engine's version algebra rather than string order, surfaces the
+      published checksum, and **refuses to install**.
+- [x] **The daemon no longer scans on battery**, and logs its resident memory
+      at startup so the 15 MB target is measured rather than assumed.
+- [x] Version bumped to 2.2.0 across the workspace, the Tauri config and the
+      GUI package.
+
+**Self-update is deliberately check-only, and the ordering is not a
+preference.** `ARCHITECTURE.md` criticises v1 for fetching a PowerShell module
+at runtime as Administrator and trusting whatever answered. Downloading an
+unsigned executable and running it elevated is the same hole with our own name
+on it. `UpdateCheck::is_installable` is the single place that decision lives,
+the verification it will need already exists in `odysync-verify`, and the test
+`odysync_refuses_to_install_its_own_updates_while_releases_are_unsigned` is
+what will fail — deliberately — on the day signing lands.
+
+Remaining, and not something code can finish:
+
+- [ ] **Buy the certificate.** Azure Trusted Signing, ~10 USD/month. Identity
+      validation takes days and requires the identity to have existed for three
+      years; if that fails, an OV certificate is the fallback. This is the last
+      thing between the project and a release a stranger can install without
+      being trained to click through a SmartScreen warning.
+- [ ] Tag `v2.2.0`. Not done here: the work is on a branch, and publishing an
+      unsigned release in the same change that adds the signing pipeline would
+      be an odd thing to do. Merge, then sign, then tag.
+- [ ] macOS signing and notarisation; Linux `.deb`/`.rpm`/AppImage.
 
 ---
 

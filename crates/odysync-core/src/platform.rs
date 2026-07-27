@@ -158,6 +158,38 @@ mod tests {
     fn reboot_pending_answers_without_panicking() {
         let _ = reboot_pending();
     }
+
+    #[test]
+    fn the_power_source_is_readable_and_is_not_unknown_on_a_real_machine() {
+        // CI runners and developer machines are both real Windows installs, so
+        // an Unknown here means the probe is broken rather than the machine
+        // being unusual.
+        let source = power_source();
+        assert_ne!(
+            source,
+            PowerSource::Unknown,
+            "could not read the power source on a real Windows machine"
+        );
+    }
+
+    #[test]
+    fn only_running_on_battery_defers_background_work() {
+        assert!(!PowerSource::Battery.allows_background_work());
+        assert!(PowerSource::Mains.allows_background_work());
+        // Unknown proceeds: refusing to update a desktop whose probe failed is
+        // worse than one scan on a laptop battery.
+        assert!(PowerSource::Unknown.allows_background_work());
+    }
+
+    #[test]
+    fn resident_memory_is_a_plausible_figure() {
+        let rss = resident_memory_bytes().expect("could not read this process's working set");
+        // A test binary is at least a megabyte and nothing like a terabyte;
+        // this catches a struct-size or units mistake rather than asserting a
+        // budget.
+        assert!(rss > 1024 * 1024, "implausibly small RSS: {rss}");
+        assert!(rss < 8 * 1024 * 1024 * 1024, "implausibly large RSS: {rss}");
+    }
 }
 
 /// Non-Windows platforms have no equivalent OS-wide signal.
@@ -168,6 +200,94 @@ mod tests {
 #[cfg(not(windows))]
 pub fn reboot_pending() -> bool {
     false
+}
+
+/// Where the machine is currently getting its power.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum PowerSource {
+    /// Plugged in, or a desktop with no battery at all.
+    Mains,
+    /// Running on battery.
+    Battery,
+    /// Could not be determined. Treated as mains, because refusing to update a
+    /// desktop that failed to answer would be worse than a laptop doing one
+    /// scan on battery.
+    Unknown,
+}
+
+impl PowerSource {
+    /// Whether background work should go ahead.
+    pub fn allows_background_work(&self) -> bool {
+        !matches!(self, PowerSource::Battery)
+    }
+}
+
+/// Read the current power source.
+///
+/// A background scanner that wakes every hour and spawns thirty package
+/// managers is a laptop-battery problem, and `ROADMAP.md` §4 has had this open
+/// since the daemon shipped.
+#[cfg(windows)]
+pub fn power_source() -> PowerSource {
+    use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
+
+    let mut status = SYSTEM_POWER_STATUS::default();
+    // SAFETY: `status` is a valid, correctly sized out-param.
+    if unsafe { GetSystemPowerStatus(&mut status) }.is_err() {
+        return PowerSource::Unknown;
+    }
+
+    // ACLineStatus: 0 offline, 1 online, 255 unknown.
+    // BatteryFlag 128 means "no system battery" — a desktop, which is always
+    // on mains however the line status reads.
+    if status.BatteryFlag == 128 {
+        return PowerSource::Mains;
+    }
+    match status.ACLineStatus {
+        0 => PowerSource::Battery,
+        1 => PowerSource::Mains,
+        _ => PowerSource::Unknown,
+    }
+}
+
+/// Non-Windows platforms are not probed.
+///
+/// Linux exposes this through `/sys/class/power_supply` and macOS through
+/// IOKit, but neither is implemented yet, and guessing would be worse than
+/// reporting that we did not look.
+#[cfg(not(windows))]
+pub fn power_source() -> PowerSource {
+    PowerSource::Unknown
+}
+
+/// Resident set size of this process, in bytes.
+///
+/// `ROADMAP.md` §4 sets a 15 MB idle target and says "measure, don't assume".
+/// This is the measurement.
+#[cfg(windows)]
+pub fn resident_memory_bytes() -> Option<u64> {
+    use windows::Win32::System::ProcessStatus::{GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
+    use windows::Win32::System::Threading::GetCurrentProcess;
+
+    let mut counters = PROCESS_MEMORY_COUNTERS {
+        cb: std::mem::size_of::<PROCESS_MEMORY_COUNTERS>() as u32,
+        ..Default::default()
+    };
+
+    // SAFETY: the pseudo-handle from GetCurrentProcess is always valid, and
+    // `counters` is correctly sized via its `cb` field.
+    let ok = unsafe { GetProcessMemoryInfo(GetCurrentProcess(), &mut counters, counters.cb) };
+    if ok.is_ok() {
+        Some(counters.WorkingSetSize as u64)
+    } else {
+        None
+    }
+}
+
+#[cfg(not(windows))]
+pub fn resident_memory_bytes() -> Option<u64> {
+    None
 }
 
 /// A short label for the current OS, used in reports and the UI.

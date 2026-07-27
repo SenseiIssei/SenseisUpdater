@@ -38,6 +38,7 @@ pub mod pacman;
 pub mod scheduler;
 pub mod scoop;
 pub mod security;
+pub mod self_update;
 pub mod snap;
 // Same as `gpu`: installs the guest additions through winget, so it cannot
 // compile without `crate::winget`. Its only use site is already cfg(windows).

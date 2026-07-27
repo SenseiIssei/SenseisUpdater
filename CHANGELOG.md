@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.0]
+
 ### Added
 - **Windows Update.** Odysync now installs Windows' own security, quality and
   Defender updates, not just drivers. Three backends over one shared Windows
@@ -71,6 +73,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`odysync optimize-disk`** — `Optimize-Volume`, TRIM on SSD and defrag on
   HDD, chosen from the media type with no override. Defragmenting an SSD writes
   the whole drive for no benefit.
+- **`odysync self-check`** reports whether a newer Odysync exists, comparing
+  versions with the same algebra the policy engine uses rather than as strings.
+  It **refuses to install one**: downloading an unsigned executable and running
+  it elevated is the same supply-chain hole the v1 rewrite existed to close, so
+  code signing comes first. A test enforces that refusal.
+- **The daemon no longer scans on battery.** A scan spawns one process per
+  detected backend — over thirty on a well-equipped Windows machine — and doing
+  that hourly drains a laptop for nothing. `--on-battery` opts back in, and an
+  explicit `--once` run always proceeds.
+- The daemon logs its resident memory at startup, so the 15 MB idle target in
+  `ROADMAP.md` §4 is measured rather than assumed.
+- **Release signing wired into CI**, gated on a `SIGNING_ENABLED` repository
+  variable so the workflow keeps working until the Azure Trusted Signing
+  procurement completes and starts signing the moment it does. Both the CLI
+  binaries and the NSIS installer are signed, with an RFC 3161 timestamp.
+  `docs/SIGNING.md` covers the setup, the certificate choice and the ordering.
+- SHA-256 checksums are now published for the installer, not just the CLI
+  archives, and CI generates **winget manifests** for each release so Odysync
+  becomes installable with `winget install`.
 - **Driver backup and rollback.** `odysync drivers backup | list |
   rollback --to <id> | prune --keep <n>` exports the Windows driver store per
   package, with a manifest, and can re-add a saved package later. Exporting
