@@ -33,6 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is still off a year later, which is how machines end up unpatched. An
   unparseable deadline in a hand-edited config is treated as *expired* rather
   than permanent, so a typo cannot silently stop security updates forever.
+- **A Windows Update card on the Updates page**, breaking pending updates down
+  by class — security & quality, Defender definitions, drivers, feature
+  upgrades — with the blocking reason per row. The generic list flattens a real
+  distinction: on an unelevated run every Windows update lands in *skipped*, so
+  13 pending security updates sat inside a list of 49 skipped entries and read
+  as "nothing to do".
 - An empty or whitespace-only pattern in `exclude` or `holds` now matches
   nothing. It previously compared equal to a package whose native id was
   empty, and silently skipping an update is the exact failure the policy engine

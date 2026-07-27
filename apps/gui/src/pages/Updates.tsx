@@ -20,6 +20,7 @@ import {
   errorText,
   formatSize,
 } from "../components/ui";
+import WindowsUpdateCard from "../components/WindowsUpdateCard";
 import type { ApplyResultDto, ApplyStatus, SkippedDto, UpdateDto } from "../types";
 
 interface Progress {
@@ -206,6 +207,12 @@ export default function Updates() {
 
       {error && <ErrorBar message={error} />}
       {scan.error && <ErrorBar message={`Scan failed: ${scan.error}`} />}
+
+      {/* Above the generic list, because on an unelevated run every Windows
+          update is "skipped" and disappears into it. */}
+      {scanResult && (
+        <WindowsUpdateCard scan={scanResult} elevated={info?.elevated ?? false} />
+      )}
 
       {/* A backend that errors out is not the same as having no updates. */}
       {scanResult && scanResult.failed_backends.length > 0 && (

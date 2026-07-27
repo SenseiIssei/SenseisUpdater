@@ -213,14 +213,26 @@ Nothing new is built until the existing thing is proven.
       than special-cased to Windows. Verified: pausing `windows-update` hid it
       while leaving `windows-defender-update` available.
 
+- [x] **GUI: a Windows Update card** above the generic list, breaking the
+      pending updates down by class with the blocking reason per row. It exists
+      because the generic list flattens a real distinction: on an unelevated
+      run every Windows update lands in `skipped`, so 13 pending security
+      updates sat inside a list of 49 skipped entries and read as "nothing to
+      do". Rendered in isolation against three fixtures — unelevated, elevated
+      with an opted-in feature upgrade, and non-Windows — which caught two
+      defects the type-checker could not: a `title` attribute that replaced the
+      visible "10 blocked" as the accessible name, and a feature-upgrade note
+      that told the user how to enable something already enabled.
+
 Remaining:
 
-- [ ] GUI: a dedicated Windows Update card with the class breakdown and a
-      "restart now / later" affordance. They currently appear in the generic
-      updates list, which works but buries the distinction.
 - [ ] Install has not been exercised: it needs elevation, and an elevated run
       was out of reach here. The scan half is verified against the real API;
       the install half is verified only by construction and unit tests.
+- [ ] No test runner for the frontend. `tsc` and `oxlint` catch types and lint,
+      but nothing asserts a component's rendered output — the two defects above
+      were found by looking, which does not scale. Vitest plus Testing Library
+      would be a small addition with a real payoff.
 
 **Risk:** WUA is a COM API with real failure modes (WSUS-managed machines,
 policy-blocked updates). `explain_hresult` covers the common ones; the rest
