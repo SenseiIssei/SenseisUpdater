@@ -12,6 +12,8 @@ pub mod autostart;
 pub mod chocolatey;
 pub mod diagnostics;
 pub mod dnf;
+#[cfg(windows)]
+pub mod driver_backup;
 pub mod firmware_backends;
 pub mod flatpak;
 pub mod fwupd;

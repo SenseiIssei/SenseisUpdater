@@ -41,6 +41,24 @@ pub struct Config {
     pub max_retries: u32,
     /// Timeout for individual backend operations in seconds.
     pub backend_timeout_secs: u32,
+    /// Export the whole driver store before applying driver updates (Windows).
+    ///
+    /// **Off by default, and the reason is a measurement rather than a
+    /// preference.** A full export is a copy of
+    /// `C:\Windows\System32\DriverStore\FileRepository`, which was 4.7 GB
+    /// across 5 229 files on the machine this was written against. Doing that
+    /// automatically before every driver update, times
+    /// [`driver_backup_keep`](Config::driver_backup_keep) generations, spends
+    /// well over ten gigabytes on the disk of the machine the tool is supposed
+    /// to be looking after.
+    ///
+    /// Windows already keeps the immediately previous driver for its own
+    /// Device Manager rollback, so the marginal value of an automatic full
+    /// export is smaller than its cost. `odysync drivers backup` takes one on
+    /// demand, and the apply path says so when none exists.
+    pub driver_backup_before_apply: bool,
+    /// How many driver backups to keep when pruning.
+    pub driver_backup_keep: u32,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -66,6 +84,8 @@ impl Default for Config {
             skip_prerelease: true,
             max_retries: 2,
             backend_timeout_secs: 120,
+            driver_backup_before_apply: false,
+            driver_backup_keep: 2,
         }
     }
 }

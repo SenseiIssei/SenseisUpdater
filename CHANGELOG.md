@@ -25,6 +25,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Odysync almost never holds an installer file: the package manager downloads
   and validates it inside its own process. AppImage is reported as *not
   verified*, with the reason.
+- **Driver backup and rollback.** `odysync drivers backup | list |
+  rollback --to <id> | prune --keep <n>` exports the Windows driver store per
+  package, with a manifest, and can re-add a saved package later. Exporting
+  works unelevated; restoring does not.
+  - Nothing parses a `pnputil` label — its output is fully localised and the
+    console code page mangles non-ASCII on the way out. The parser reads
+    values: `oem<n>.inf` is a published name in every language.
+  - Automatic backup before applying driver updates is **off by default**:
+    `DriverStore\FileRepository` measured 4.7 GB here, so an automatic export
+    at the default retention would spend over ten gigabytes of the user's disk.
+    `odysync apply` instead names the most recent backup, or says plainly that
+    there is none. `driver-backup-before-apply` opts in.
+  - Restore is not a forced downgrade, and says so on every run: Windows ranks
+    driver packages, so a newer one still in the store can keep winning.
 - Dependabot for cargo, npm and GitHub Actions, grouped weekly.
 - `npm audit --audit-level=moderate` in the GUI CI job. Rust dependencies were
   audited by `cargo-audit` and `cargo-deny`; the 116 npm packages were not

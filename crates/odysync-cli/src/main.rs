@@ -160,6 +160,47 @@ enum Command {
         #[arg(long)]
         once: bool,
     },
+
+    /// Back up and restore the Windows driver store.
+    #[cfg(windows)]
+    Drivers {
+        #[command(subcommand)]
+        action: DriverAction,
+    },
+}
+
+/// Driver-store backup operations.
+///
+/// Exporting works unelevated; putting a package back does not.
+#[cfg(windows)]
+#[derive(clap::Subcommand)]
+enum DriverAction {
+    /// Export every third-party driver package to a new backup.
+    Backup {
+        /// Why this backup is being taken, recorded in the manifest.
+        #[arg(long, default_value = "manual")]
+        reason: String,
+    },
+
+    /// List the backups on disk, newest first.
+    List,
+
+    /// Re-add a backup's driver packages and install them.
+    ///
+    /// Not a forced downgrade: Windows ranks driver packages, so a newer one
+    /// still in the store can keep winning. Needs administrator rights.
+    Rollback {
+        /// Backup id, as shown by `odysync drivers list`.
+        #[arg(long = "to")]
+        to: String,
+    },
+
+    /// Delete all but the newest backups.
+    Prune {
+        /// How many to keep.
+        #[arg(long, default_value = "3")]
+        keep: usize,
+    },
 }
 
 #[derive(clap::ValueEnum, Clone, Copy)]
@@ -340,6 +381,23 @@ async fn run(cli: Cli) -> Result<u8> {
 
             if actionable == 0 {
                 return Ok(0);
+            }
+
+            #[cfg(windows)]
+            let driver_updates = plan
+                .iter()
+                .filter(|p| p.is_actionable())
+                .filter(|p| {
+                    p.candidate.id.backend == odysync_core::model::BackendKind::WindowsDrivers
+                })
+                .count();
+
+            // A driver update is the one routine change that can leave a
+            // machine without a display or a network card. Say so before the
+            // confirmation prompt, not after.
+            #[cfg(windows)]
+            if driver_updates > 0 && !dry_run && !cli.json {
+                driver_backup_notice(&config, driver_updates, &style).await;
             }
 
             if !yes && !dry_run && !confirm(actionable)? {
@@ -531,6 +589,183 @@ async fn run(cli: Cli) -> Result<u8> {
             };
             let code = daemon::run(&opts, &config_path).await?;
             Ok(code)
+        }
+
+        #[cfg(windows)]
+        Command::Drivers { action } => run_driver_action(action, cli.json, &style).await,
+    }
+}
+
+/// Take a driver backup before applying, or say plainly that there is none.
+///
+/// Backing up automatically is off by default because a full driver-store
+/// export is a copy of `DriverStore\FileRepository` — 4.7 GB on the machine
+/// this was measured on. Silently spending that, twice over, on the disk of
+/// the machine we are maintaining is not a good default. Silently *not* having
+/// a rollback is not acceptable either, so the user is told which of the two
+/// they are getting.
+#[cfg(windows)]
+async fn driver_backup_notice(config: &Config, driver_updates: usize, style: &Style) {
+    use odysync_backends::driver_backup;
+
+    if config.driver_backup_before_apply {
+        println!(
+            "\nExporting the driver store before applying {driver_updates} driver update(s). \
+             This copies several gigabytes and takes a few minutes."
+        );
+        match driver_backup::create_backup(&format!(
+            "before applying {driver_updates} driver update(s)"
+        ))
+        .await
+        {
+            Ok(manifest) => {
+                println!(
+                    "Backed up {} package(s) as {}.",
+                    manifest.packages.len(),
+                    manifest.id
+                );
+                if let Err(e) = driver_backup::prune(config.driver_backup_keep as usize) {
+                    tracing::warn!(error = %e, "could not prune old driver backups");
+                }
+            }
+            // A failed backup must not silently become "no backup". It also
+            // must not block an update the user asked for; they are told and
+            // then asked to confirm, which is the next thing that happens.
+            Err(e) => eprintln!("warning: the driver backup failed: {e}"),
+        }
+        return;
+    }
+
+    let existing = driver_backup::list_backups().unwrap_or_default();
+    match existing.first() {
+        Some(latest) => println!(
+            "\n{} {} driver update(s). Most recent driver backup: {} ({}).",
+            style.bold("Note:"),
+            driver_updates,
+            latest.id,
+            latest.reason
+        ),
+        None => println!(
+            "\n{} applying {} driver update(s) with no driver backup on disk.\n  \
+             Take one first with `odysync drivers backup`, or set \
+             `driver-backup-before-apply` in the config to do it automatically.\n  \
+             Windows keeps its own single-step rollback in Device Manager either way.",
+            style.bold("Note:"),
+            driver_updates,
+        ),
+    }
+}
+
+/// `odysync drivers <action>`.
+#[cfg(windows)]
+async fn run_driver_action(action: DriverAction, json: bool, style: &Style) -> Result<u8> {
+    use odysync_backends::driver_backup;
+
+    match action {
+        DriverAction::Backup { reason } => {
+            let packages = driver_backup::list_packages().await?;
+            if packages.is_empty() {
+                println!("No third-party driver packages are installed; nothing to back up.");
+                return Ok(0);
+            }
+
+            println!(
+                "Exporting {} driver package(s). This copies the whole driver store and \
+                 can take a few minutes.",
+                packages.len()
+            );
+            let manifest = driver_backup::create_backup_of(&reason, &packages).await?;
+
+            if json {
+                println!("{}", serde_json::to_string_pretty(&manifest)?);
+                return Ok(0);
+            }
+
+            println!(
+                "\n{} {} package(s), {:.1} MB, id {}",
+                style.bold("Backed up"),
+                manifest.packages.len(),
+                manifest.total_size_bytes() as f64 / (1024.0 * 1024.0),
+                manifest.id,
+            );
+            // A partial backup restores less than the user thinks it will, so
+            // it is called out rather than folded into the success line.
+            if !manifest.is_complete() {
+                eprintln!(
+                    "\nwarning: {} package(s) could not be exported:",
+                    manifest.failures.len()
+                );
+                for failure in &manifest.failures {
+                    eprintln!("  {failure}");
+                }
+            }
+            Ok(0)
+        }
+
+        DriverAction::List => {
+            let backups = driver_backup::list_backups()?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&backups)?);
+                return Ok(0);
+            }
+            if backups.is_empty() {
+                println!("No driver backups yet. Create one with `odysync drivers backup`.");
+                return Ok(0);
+            }
+
+            println!("{}", style.bold("Driver backups (newest first)\n"));
+            for b in &backups {
+                println!(
+                    "  {:<22}  {:>4} pkgs  {:>8.1} MB  {}{}",
+                    b.id,
+                    b.packages.len(),
+                    b.total_size_bytes() as f64 / (1024.0 * 1024.0),
+                    b.reason,
+                    if b.is_complete() {
+                        String::new()
+                    } else {
+                        format!("  ({} failed)", b.failures.len())
+                    },
+                );
+            }
+            Ok(0)
+        }
+
+        DriverAction::Rollback { to } => {
+            let report = driver_backup::restore(&to).await?;
+            if json {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+                return Ok(0);
+            }
+
+            println!(
+                "Re-added {} package(s); {} failed.",
+                report.restored.len(),
+                report.failed.len()
+            );
+            for failure in &report.failed {
+                eprintln!("  {failure}");
+            }
+            if report.reboot_required {
+                println!("\n{}", style.bold("A restart is required to finish."));
+            }
+            // Said every time, because it is the part people get wrong: this
+            // puts the old package back, it does not remove the new one.
+            println!(
+                "\n{}",
+                style.dim(
+                    "Windows ranks driver packages. If a newer package is still in the \
+                     store it may keep being preferred; remove it from Device Manager to \
+                     force the older one."
+                )
+            );
+            Ok(if report.failed.is_empty() { 0 } else { 1 })
+        }
+
+        DriverAction::Prune { keep } => {
+            let removed = driver_backup::prune(keep)?;
+            println!("Removed {removed} old driver backup(s), keeping {keep}.");
+            Ok(0)
         }
     }
 }

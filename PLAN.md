@@ -264,20 +264,57 @@ backend ever downloads its own payload.
 **Exit:** every verification statement in the UI names who performed the check,
 and the one file Odysync fetches itself is actually checked.
 
-### Phase D — Driver safety: backup and rollback (2 days)
+### Phase D — Driver safety: backup and rollback — **done**
 
-This is what makes hardware updates defensible.
+- [x] `driver_backup` module: enumerate, export per package into
+      `%LOCALAPPDATA%\SenseiIssei\Odysync\data\driver-backup\<id>\`, list,
+      restore, prune.
+- [x] `odysync drivers backup | list | rollback --to <id> | prune --keep <n>`.
+- [x] Retention via `prune`, wired to `driver-backup-keep` (default 2).
+- [x] Verified against the real driver store: 215 packages enumerated (matching
+      an independent count), one exported to 10 files / 22.5 MB, manifest
+      written, listed and pruned cleanly.
 
-- [ ] Before any driver install: `pnputil /export-driver *` into
-      `%LOCALAPPDATA%\Odysync\driver-backup\<timestamp>\`, with a manifest.
-- [ ] `odysync drivers rollback --to <timestamp>` and a GUI button on the
-      Hardware page, using DriverStore restore / `pnputil /add-driver /install`.
-- [ ] Keep the forced restore point for firmware — firmware is the one thing
-      that genuinely cannot be undone, and it should stay behind its own
-      confirmation step (it already is).
-- [ ] Retention policy: keep the last N backups, prune the rest.
+**Nothing here parses a label.** `pnputil` output is fully localised — on this
+machine `Published Name` reads `Veröffentlichter Name`, with the umlaut
+mangled by the console code page on the way out. The parser reads *values*: an
+`oem<n>.inf` token is a published name in every locale, and the other `.inf`
+token in the same record is the original name. Export and restore go through
+exit codes alone.
 
-**Exit:** a bad GPU driver is one click from being undone without safe mode.
+**The bug that unit tests could not have caught.** The first parser split
+blocks on `"\n\n"`. `pnputil` is a Windows console program, so its blank line
+is `\r\n\r\n` and that split never matches — the whole output collapsed into
+one block and the parser returned **1 package on a machine with 215**. The
+tests passed, because they were written with `\n` and so only ever tested their
+own assumption. Every parser test now runs against both line endings, and one
+asserts a record *count* specifically, because the failure mode returns exactly
+one item no matter how many are present.
+
+**Automatic pre-apply backup is off by default, from a measurement.**
+`DriverStore\FileRepository` is **4.7 GB across 5 229 files** here, and the
+single package exported during verification was 22.5 MB — so a full export is
+around 5 GB, twice over at the default retention. Spending ten-plus gigabytes
+of the user's disk automatically, on the machine we are meant to be looking
+after, is not a defensible default, and Windows already keeps a single-step
+rollback in Device Manager. So `odysync apply` **says which of the two the user
+is getting**: it names the most recent backup, or states plainly that there is
+none and how to take one. `driver-backup-before-apply` turns the automatic
+export on for those who want it.
+
+**Restore is honest about its limits.** `pnputil /add-driver /install` re-adds
+the saved package and installs it where it applies — it is not a forced
+downgrade. Windows ranks driver packages, and a newer one still in the store
+can keep winning; removing that newer package is destructive and is left to the
+user in Device Manager rather than done automatically. The CLI prints this
+every time rather than only in the docs.
+
+Remaining:
+
+- [ ] Restore has not been exercised: writing to the driver store needs
+      elevation, which was out of reach here. Export, list and prune are
+      verified against the real system; restore is covered by unit tests only.
+- [ ] GUI button on the Hardware page.
 
 ### Phase E — Advanced SystemCare parity, minus the snake oil (3–4 days)
 
