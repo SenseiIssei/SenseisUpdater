@@ -188,6 +188,38 @@ enum Command {
         #[command(subcommand)]
         action: DriverAction,
     },
+
+    /// Measure reclaimable disk space, and optionally reclaim it.
+    ///
+    /// Scanning is the default. Nothing is deleted without `--apply`, and even
+    /// then only the categories that are safe by default unless `--only` names
+    /// others.
+    #[cfg(windows)]
+    Clean {
+        /// Actually delete. Without this the command only measures.
+        #[arg(long)]
+        apply: bool,
+
+        /// Comma-separated category ids instead of the safe defaults.
+        ///
+        /// `odysync clean` lists the ids. Categories that destroy data —
+        /// the Recycle Bin, superseded components — are only ever cleaned when
+        /// named here.
+        #[arg(long, value_delimiter = ',')]
+        only: Vec<String>,
+
+        /// Skip the confirmation prompt.
+        #[arg(short, long)]
+        yes: bool,
+    },
+
+    /// Report how each volume should be optimised, and optionally do it.
+    #[cfg(windows)]
+    OptimizeDisk {
+        /// Actually run the optimisation.
+        #[arg(long)]
+        apply: bool,
+    },
 }
 
 /// Driver-store backup operations.
@@ -661,7 +693,222 @@ async fn run(cli: Cli) -> Result<u8> {
 
         #[cfg(windows)]
         Command::Drivers { action } => run_driver_action(action, cli.json, &style).await,
+
+        #[cfg(windows)]
+        Command::Clean { apply, only, yes } => run_clean(apply, only, yes, cli.json, &style).await,
+
+        #[cfg(windows)]
+        Command::OptimizeDisk { apply } => run_optimize_disk(apply, cli.json, &style).await,
     }
+}
+
+/// `odysync clean`.
+#[cfg(windows)]
+async fn run_clean(
+    apply: bool,
+    only: Vec<String>,
+    yes: bool,
+    json: bool,
+    style: &Style,
+) -> Result<u8> {
+    use odysync_core::cleanup::{default_reclaimable, CleanupCategory};
+
+    let findings = odysync_backends::cleanup::scan().await;
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&findings)?);
+        if !apply {
+            return Ok(0);
+        }
+    }
+
+    if !json {
+        println!("{}", style.bold("Reclaimable disk space\n"));
+        for f in &findings {
+            let size = match (&f.error, f.bytes) {
+                (Some(e), _) => format!("could not measure: {e}"),
+                (None, 0) => "nothing found".to_string(),
+                (None, b) => format!("{:.1} MB", b as f64 / (1024.0 * 1024.0)),
+            };
+            let marker = if f.category.is_report_only() {
+                "report only"
+            } else if f.category.selected_by_default() {
+                "default"
+            } else {
+                "opt-in"
+            };
+            println!(
+                "  {:<22} {:>22}   {}",
+                f.category.id(),
+                size,
+                style.dim(marker)
+            );
+            if let Some(note) = &f.note {
+                println!("  {:<22} {}", "", style.dim(note));
+            }
+        }
+
+        println!(
+            "\n{} {:.1} MB in the categories that are safe by default.",
+            style.bold("Total:"),
+            default_reclaimable(&findings) as f64 / (1024.0 * 1024.0),
+        );
+    }
+
+    if !apply {
+        if !json {
+            println!(
+                "\n{}",
+                style.dim("Nothing was deleted. Add --apply to reclaim it.")
+            );
+        }
+        return Ok(0);
+    }
+
+    // Resolve which categories to act on. An unknown id is an error rather
+    // than a silent no-op: a typo must not read as "cleaned successfully".
+    let selected: Vec<CleanupCategory> = if only.is_empty() {
+        findings
+            .iter()
+            .filter(|f| f.is_actionable() && f.category.selected_by_default())
+            .map(|f| f.category)
+            .collect()
+    } else {
+        let mut chosen = Vec::new();
+        for id in &only {
+            let Some(category) = CleanupCategory::from_id(id) else {
+                anyhow::bail!(
+                    "unknown cleanup category {id:?}. Run `odysync clean` to see the ids."
+                );
+            };
+            chosen.push(category);
+        }
+        chosen
+    };
+
+    if selected.is_empty() {
+        println!("\nNothing to clean.");
+        return Ok(0);
+    }
+
+    // Anything that cannot be undone is named individually before the prompt,
+    // not folded into a count.
+    let destructive: Vec<&CleanupCategory> = selected
+        .iter()
+        .filter(|c| c.reversibility().needs_explicit_confirmation())
+        .collect();
+    if !destructive.is_empty() {
+        println!("\n{}", style.bold("This cannot be undone:"));
+        for c in &destructive {
+            println!("  {} — {}", c.label(), c.consequence());
+        }
+    }
+
+    if !yes && !confirm_clean(selected.len())? {
+        println!("Cancelled.");
+        return Ok(0);
+    }
+
+    let results = odysync_backends::cleanup::clean(selected).await;
+
+    if json {
+        let payload: Vec<_> = results
+            .iter()
+            .map(|(c, o)| serde_json::json!({ "category": c.id(), "outcome": o }))
+            .collect();
+        println!("{}", serde_json::to_string_pretty(&payload)?);
+        return Ok(0);
+    }
+
+    let mut total = 0u64;
+    println!();
+    for (category, outcome) in &results {
+        total += outcome.removed_bytes;
+        println!(
+            "  {:<22} {:.1} MB, {} file(s)",
+            category.id(),
+            outcome.removed_bytes as f64 / (1024.0 * 1024.0),
+            outcome.removed_files
+        );
+        // Locked files are the normal case on Windows, so these are listed
+        // rather than treated as a failure.
+        for skipped in outcome.skipped.iter().take(5) {
+            println!("  {:<22} {}", "", style.dim(skipped));
+        }
+        if outcome.skipped.len() > 5 {
+            println!(
+                "  {:<22} {}",
+                "",
+                style.dim(&format!("... and {} more", outcome.skipped.len() - 5))
+            );
+        }
+    }
+    println!(
+        "\n{} {:.1} MB",
+        style.bold("Reclaimed:"),
+        total as f64 / (1024.0 * 1024.0)
+    );
+    Ok(0)
+}
+
+/// Ask before deleting. A closed stdin is never consent.
+#[cfg(windows)]
+fn confirm_clean(count: usize) -> Result<bool> {
+    use std::io::{BufRead, Write};
+
+    print!(
+        "\nClean {count} categor{}? [y/N] ",
+        if count == 1 { "y" } else { "ies" }
+    );
+    std::io::stdout().flush()?;
+
+    let mut line = String::new();
+    if std::io::stdin().lock().read_line(&mut line)? == 0 {
+        return Ok(false);
+    }
+    Ok(matches!(
+        line.trim().to_ascii_lowercase().as_str(),
+        "y" | "yes"
+    ))
+}
+
+/// `odysync optimize-disk`.
+#[cfg(windows)]
+async fn run_optimize_disk(apply: bool, json: bool, style: &Style) -> Result<u8> {
+    let plan = odysync_backends::cleanup::plan_disk_optimization().await?;
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&plan)?);
+    } else if plan.is_empty() {
+        println!("No volumes with a drive letter were found.");
+    } else {
+        println!("{}", style.bold("Disk optimisation plan\n"));
+        for v in &plan {
+            println!("  {:<6} {:<10} {}", v.drive, v.media_type, v.operation);
+        }
+        // The media type decides the operation and there is no override:
+        // defragmenting an SSD spends its erase cycles for no benefit.
+        println!(
+            "\n{}",
+            style.dim(
+                "SSDs are trimmed, never defragmented. The media type decides; \
+                 there is no override."
+            )
+        );
+    }
+
+    if !apply {
+        if !json && !plan.is_empty() {
+            println!("{}", style.dim("Add --apply to run it."));
+        }
+        return Ok(0);
+    }
+
+    let report = odysync_backends::cleanup::run_disk_optimization(&plan).await;
+    for line in &report {
+        println!("  {line}");
+    }
+    Ok(0)
 }
 
 /// Take a driver backup before applying, or say plainly that there is none.

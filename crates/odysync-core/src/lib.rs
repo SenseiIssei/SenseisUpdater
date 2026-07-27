@@ -3,6 +3,7 @@
 //! lives in `odysync-backends` — which keeps every safety rule unit-testable.
 
 pub mod backend;
+pub mod cleanup;
 pub mod config;
 pub mod error;
 pub mod health;
@@ -21,6 +22,7 @@ pub mod version;
 pub mod windows_update;
 
 pub use backend::{ApplyPhase, ApplyProgress, Backend};
+pub use cleanup::{CleanupCategory, CleanupFinding, CleanupOutcome, Reversibility};
 pub use config::Config;
 pub use error::{Error, Result};
 pub use health::{all_passed, failure_reasons, run_health_checks, HealthCheckResult};

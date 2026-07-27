@@ -337,32 +337,68 @@ Remaining:
       verified against the real system; restore is covered by unit tests only.
 - [ ] GUI button on the Hardware page.
 
-### Phase E — Advanced SystemCare parity, minus the snake oil (3–4 days)
+### Phase E — Advanced SystemCare parity, minus the snake oil — **done**
 
-Every cleaner here follows the same contract: **scan first, show sizes,
-delete only what the user ticked, never touch anything outside a known list.**
+Every cleaner follows one contract: **scan first, show sizes, delete only what
+was ticked, never touch anything outside a declared root.**
 
-- [ ] Junk scanner with categories and byte counts, dry-run by default:
-      - Windows Update cleanup — `DISM /StartComponentCleanup` (WinSxS)
-      - Delivery Optimization cache
-      - `Windows.old` (with a loud warning: this removes rollback to the
-        previous Windows build)
-      - Thumbnail/icon caches, error reports, memory dumps, prefetch
-      - Per-user temp beyond `%TEMP%` (already covered)
-- [ ] Browser traces (Chrome, Edge, Firefox): cache and history, **per profile,
-      explicit tick per item, refused while the browser is running**. Cookies
-      and saved passwords are never offered.
-- [ ] Large files and duplicates: report-only, sorted by size, with an "open in
-      Explorer" action. Odysync does not delete a user's own documents.
-- [ ] Disk optimisation: `Optimize-Volume` — TRIM on SSD, defrag on HDD,
-      detected per volume, never defrag an SSD.
-- [ ] Startup impact: measure real boot delay per entry
-      (`Explorer\StartupApproved` + task manager's impact data) and offer
-      **delay** as well as disable — disabling an updater is how machines end
-      up out of date.
+- [x] `odysync clean` measures ten categories and deletes nothing. `--apply`
+      is required to remove anything, `--only` to touch a category that is not
+      safe by default, and anything irreversible is named individually before
+      the prompt rather than folded into a count.
+- [x] Categories: temp files, thumbnail and icon caches, Recycle Bin, error
+      reports, crash dumps, Windows Update downloads, Delivery Optimization,
+      browser caches, superseded components, `Windows.old`.
+- [x] **Three independent path checks** before anything is removed, so a
+      mistake in one is caught by the next: roots are filtered through
+      `is_safe_cleanup_root` (an unset `%LOCALAPPDATA%` collapsing a root to
+      `\Temp` is dropped, not acted on); the walk never follows a directory
+      symlink, so a junction inside a cache cannot lead it elsewhere; and every
+      individual path is re-checked with `is_within` immediately before
+      deletion.
+- [x] Browser caches for Chrome, Edge and Firefox, per profile, **refused while
+      the browser is running** — and only `Cache`, `Code Cache`, `GPUCache`,
+      `cache2`. Never `Cookies`, `Login Data` or `Network`. A test asserts no
+      declared directory is a credential store.
+- [x] `odysync optimize-disk`: `Optimize-Volume`, **TRIM on SSD, defrag on
+      HDD**, chosen from the media type with no user override — defragmenting
+      an SSD writes the whole drive for no benefit.
+- [x] `Windows.old` is **measured and never deleted**. It is owned by
+      TrustedInstaller, and a half-working reimplementation of Disk Cleanup
+      that fails partway leaves the tree in a state neither tool understands.
+      The size is the useful part; the user is pointed at Settings → Storage.
+- [x] `DISM /StartComponentCleanup` **without `/ResetBase`** — that flag
+      additionally makes every installed update permanently un-uninstallable,
+      which is a much larger promise than "reclaim superseded components".
 
-**Exit:** the Maintenance page reports a credible reclaimable-space figure and
-every action is reversible or clearly labelled as not.
+**Verified against this machine**, and the measurements were checked against
+independent counts rather than trusted:
+
+| Category | Odysync | Independent check |
+|---|---|---|
+| Windows Update downloads | 9621.4 MB | 9621.4 MB — exact |
+| Temp files | 1115.9 MB | 1115.9 MB — exact |
+| Recycle Bin | 879.9 MB | 881.7 MB across both drives |
+| Browser caches | 1226.8 MB | Chrome, Edge and Firefox all found |
+
+The Recycle Bin case is worth recording: the obvious PowerShell check
+(`Shell.Application.NameSpace(0xA).Items().Size`) reported **1.1 MB**, because
+`.Size` does not recurse into deleted folders and it missed `D:` entirely.
+`SHQueryRecycleBinW` is authoritative, which is also why the code does not walk
+`$Recycle.Bin` itself.
+
+**Deliberately not built, for the same reason as the registry cleaner:**
+
+- **A startup "impact" score.** `Explorer\StartupApproved` gives the
+  enabled/disabled state, which Odysync already lists — but Task Manager's
+  impact rating comes from undocumented telemetry that cannot be reproduced
+  faithfully. A number that looks like Task Manager's and disagrees with it is
+  worse than no number. Offering *delay* as well as disable is still a good
+  idea and remains open; it does not need a fake score.
+- **Large-file and duplicate reporting.** Genuinely useful and genuinely
+  report-only, but a full-disk hash walk is expensive and was not something
+  that could be verified properly here. Left open rather than shipped
+  unverified.
 
 ### Phase F — Ship it properly (1 day of work, weeks of lead time)
 

@@ -10,6 +10,7 @@ pub mod appimage;
 pub mod apt;
 pub mod autostart;
 pub mod chocolatey;
+pub mod cleanup;
 pub mod diagnostics;
 pub mod dnf;
 #[cfg(windows)]

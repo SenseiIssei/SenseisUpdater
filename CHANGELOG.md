@@ -48,6 +48,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Odysync almost never holds an installer file: the package manager downloads
   and validates it inside its own process. AppImage is reported as *not
   verified*, with the reason.
+- **Disk cleanup.** `odysync clean` measures ten categories — temp files,
+  thumbnail caches, Recycle Bin, error reports, crash dumps, Windows Update
+  downloads, Delivery Optimization, browser caches, superseded components,
+  `Windows.old` — and deletes nothing. `--apply` is required to remove
+  anything, `--only` to touch a category that is not safe by default, and
+  anything irreversible is named individually before the prompt.
+  - Three independent path checks guard every deletion: roots are filtered
+    through `is_safe_cleanup_root` so an unset `%LOCALAPPDATA%` cannot collapse
+    one into `\Temp`; the walk never follows a directory symlink, so a junction
+    inside a cache cannot lead it elsewhere; and each path is re-checked with
+    `is_within` immediately before removal.
+  - Browser caches are per profile and **refused while the browser is
+    running**. Only `Cache`, `Code Cache`, `GPUCache` and `cache2` — never
+    `Cookies`, `Login Data` or `Network`. A test asserts no declared directory
+    is a credential store.
+  - `Windows.old` is measured and never deleted: it is owned by
+    TrustedInstaller, and a partial reimplementation of Disk Cleanup would
+    leave the tree in a state neither tool understands.
+  - `DISM /StartComponentCleanup` runs **without** `/ResetBase`, which would
+    additionally make every installed update permanently un-uninstallable.
+- **`odysync optimize-disk`** — `Optimize-Volume`, TRIM on SSD and defrag on
+  HDD, chosen from the media type with no override. Defragmenting an SSD writes
+  the whole drive for no benefit.
 - **Driver backup and rollback.** `odysync drivers backup | list |
   rollback --to <id> | prune --keep <n>` exports the Windows driver store per
   package, with a manifest, and can re-add a saved package later. Exporting
