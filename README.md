@@ -277,7 +277,8 @@ cargo fmt --all -- --check
 
 One thing this list does **not** claim, stated plainly because the previous
 version of it did: Odysync's own releases are unsigned, so SmartScreen warns on
-every install. That is Phase F of [PLAN.md](PLAN.md).
+every install. That is Phase F of [PLAN.md](PLAN.md), and
+[NEXT.md](NEXT.md) is the current state of what remains.
 
 ---
 
