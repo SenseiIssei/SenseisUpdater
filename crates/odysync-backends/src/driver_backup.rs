@@ -47,6 +47,22 @@ const RESTORE_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 /// Name of the manifest written into each backup directory.
 const MANIFEST_FILENAME: &str = "odysync-driver-backup.json";
 
+/// `ERROR_NO_MORE_ITEMS`, which `pnputil /add-driver /install` returns when the
+/// package was added but **no device needed it** — every matching device
+/// already had a driver at least as good.
+///
+/// This is the normal outcome of restoring a package that is still current,
+/// and it is also what happens in the case the module documents at length:
+/// Windows ranks driver packages, so if the newer one is still in the store it
+/// keeps winning and nothing is installed. Reporting either as a failure would
+/// make a working restore look broken, and would train users to ignore the
+/// error line that matters.
+///
+/// Found by running a real restore elevated: the first version of this code
+/// reported "Re-added 0 package(s); 1 failed" for an operation that had done
+/// exactly what it should.
+const ERROR_NO_MORE_ITEMS: i32 = 259;
+
 /// One third-party driver package in the Windows driver store.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DriverPackage {
@@ -99,10 +115,26 @@ impl BackupManifest {
 /// What a restore actually managed to do.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct RestoreReport {
+    /// Packages that were re-added and installed onto a device.
     pub restored: Vec<String>,
+    /// Packages that were re-added, but which no device needed.
+    ///
+    /// Separate from both success and failure because it is genuinely a third
+    /// outcome: the package is back in the driver store, and Windows decided
+    /// the driver already on the device was at least as good. Folding it into
+    /// `failed` misreports a working restore; folding it into `restored`
+    /// claims a device changed when none did.
+    pub already_current: Vec<String>,
     pub failed: Vec<String>,
     /// Windows asked for a restart to finish installing at least one package.
     pub reboot_required: bool,
+}
+
+impl RestoreReport {
+    /// Whether every package was dealt with, one way or the other.
+    pub fn is_success(&self) -> bool {
+        self.failed.is_empty()
+    }
 }
 
 // ── Parsing ─────────────────────────────────────────────────────────────────
@@ -464,6 +496,11 @@ pub async fn restore(id: &str) -> Result<RestoreReport> {
 
         match result {
             Ok(out) if out.success() => report.restored.push(package.published_name.clone()),
+            // Added to the store, but no device wanted it. A third outcome,
+            // not a failure — see ERROR_NO_MORE_ITEMS.
+            Ok(out) if out.code == ERROR_NO_MORE_ITEMS => {
+                report.already_current.push(package.published_name.clone())
+            }
             Ok(out) => report.failed.push(format!(
                 "{} failed with exit code {}",
                 package.published_name, out.code
@@ -481,6 +518,7 @@ pub async fn restore(id: &str) -> Result<RestoreReport> {
     tracing::info!(
         id,
         restored = report.restored.len(),
+        already_current = report.already_current.len(),
         failed = report.failed.len(),
         "driver restore finished"
     );
@@ -670,6 +708,37 @@ mod tests {
         ids.sort_by(|a, b| b.cmp(a));
         assert_eq!(ids[0], "2026-07-27T14-05-33Z");
         assert_eq!(ids[2], "2025-12-31T23-59-59Z");
+    }
+
+    /// Found by a real elevated restore, which reported
+    /// "Re-added 0 package(s); 1 failed" for an operation that had done
+    /// exactly what it should: the package went back into the store and no
+    /// device needed it, because the driver already installed was current.
+    #[test]
+    fn a_package_no_device_needed_is_not_a_failure() {
+        let mut report = RestoreReport::default();
+        report.already_current.push("oem23.inf".into());
+
+        assert!(report.is_success(), "259 must not read as a failed restore");
+        assert!(report.failed.is_empty());
+        // Nor may it be claimed as a device that changed.
+        assert!(report.restored.is_empty());
+    }
+
+    #[test]
+    fn a_genuine_failure_still_fails() {
+        let mut report = RestoreReport::default();
+        report
+            .failed
+            .push("oem9.inf failed with exit code 5".into());
+        assert!(!report.is_success());
+    }
+
+    #[test]
+    fn the_no_more_items_code_is_the_documented_one() {
+        // ERROR_NO_MORE_ITEMS. Named rather than inlined so the next person
+        // does not have to look up what 259 meant.
+        assert_eq!(ERROR_NO_MORE_ITEMS, 259);
     }
 
     #[test]

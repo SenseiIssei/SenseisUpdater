@@ -104,6 +104,16 @@ pub fn explain_hresult(hr: i32) -> String {
             "could not reach the Windows Update service — check the network or a proxy"
         }
         0x8024_000B => "the operation was cancelled",
+        // Seen for real: UAC on a domain-joined machine can elevate into a
+        // *different* account from the interactive one, and the Update Agent
+        // refuses to start its server outside the interactive session. The
+        // fix is to run elevated as the signed-in user, not to retry.
+        0x8024_001E => {
+            "the Windows Update service stopped or would not start for this session — \
+             this happens when running elevated as a different account than the one \
+             signed in, and when the service has been stopped"
+        }
+        0x8024_001F => "no network connection is available for Windows Update",
         0x8024_1001 => "the Windows Update installer is busy or in an unexpected state",
         0x8007_0005 => "access denied — this needs to run elevated",
         0x8024_0032 => "the search criteria were rejected by the Windows Update Agent",
@@ -131,8 +141,19 @@ mod imp {
     /// `OperationResultCode::orcSucceededWithErrors`.
     const ORC_SUCCEEDED_WITH_ERRORS: i32 = 3;
 
-    fn wua_err(what: &str, e: impl std::fmt::Display) -> Error {
-        Error::parse("Windows Update Agent", format!("{what}: {e}"))
+    /// Wrap a WUA COM failure, routing the code through [`explain_hresult`].
+    ///
+    /// This used to take `impl Display` and format the raw `windows::core::Error`,
+    /// which meant the translation table above was only ever reached by the
+    /// download and install *result codes* — never by a failure of the search
+    /// itself, which is the most common way this goes wrong. A real elevated
+    /// run reported `the update search failed: 0x8024001E` and left the user
+    /// with a hex number and nothing to do about it.
+    fn wua_err(what: &str, e: windows::core::Error) -> Error {
+        Error::parse(
+            "Windows Update Agent",
+            format!("{what}: {}", explain_hresult(e.code().0)),
+        )
     }
 
     /// Run `f` on a blocking thread inside a COM apartment.
@@ -155,7 +176,14 @@ mod imp {
             result
         })
         .await
-        .map_err(|e| wua_err("the COM worker thread panicked", e))?
+        // A `JoinError` carries no HRESULT, so it does not go through
+        // `wua_err` — there is nothing for the translation table to explain.
+        .map_err(|e| {
+            Error::parse(
+                "Windows Update Agent",
+                format!("the COM worker thread panicked: {e}"),
+            )
+        })?
     }
 
     /// Create an `IUpdateSession`.
@@ -424,6 +452,49 @@ pub async fn install(_criteria: &'static str, _key: String) -> Result<InstallOut
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The code a real elevated run produced. It reached the user as the bare
+    /// string `0x8024001E`, which tells them nothing they can act on — and the
+    /// cause is specific and fixable: UAC on a domain-joined machine can
+    /// elevate into a different account from the interactive one.
+    #[test]
+    fn the_service_stop_code_is_explained_rather_than_printed_raw() {
+        let text = explain_hresult(0x8024_001Eu32 as i32);
+        assert!(text.contains("0x8024001E"), "the raw code is still useful");
+        assert!(
+            text.contains("different account") || text.contains("stopped"),
+            "not actionable: {text}"
+        );
+    }
+
+    #[test]
+    fn an_unknown_code_still_reports_its_hex_value() {
+        // Falling through must not swallow the code — a bug report needs it.
+        let text = explain_hresult(0x8024_DEADu32 as i32);
+        assert!(text.contains("0x8024DEAD"), "{text}");
+    }
+
+    #[test]
+    fn every_explained_code_keeps_its_hex_value_in_the_message() {
+        // The explanation is for the user; the hex is for the bug report.
+        // Both have to survive, and it is easy to add a case that drops one.
+        for code in [
+            0x8024_0024u32,
+            0x8024_0034,
+            0x8024_0016,
+            0x8024_002E,
+            0x8024_001E,
+            0x8024_001F,
+            0x8007_0005,
+        ] {
+            let text = explain_hresult(code as i32);
+            assert!(
+                text.contains(&format!("0x{code:08X}")),
+                "0x{code:08X} lost its code: {text}"
+            );
+            assert!(text.len() > 20, "0x{code:08X} has a stub explanation");
+        }
+    }
 
     #[test]
     fn the_software_criteria_excludes_drivers_and_hidden_updates() {

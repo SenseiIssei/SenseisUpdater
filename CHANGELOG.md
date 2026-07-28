@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **A driver restore reported failure when it had succeeded.** `pnputil
+  /add-driver /install` returns `ERROR_NO_MORE_ITEMS` (259) when the package
+  was added to the store but no device needed it — every matching device
+  already had a driver at least as good. That is the normal outcome of
+  restoring a still-current package, and it is also what happens in the case
+  the module documents at length: Windows ranks driver packages, so a newer one
+  still in the store keeps winning. `RestoreReport` now has a third bucket,
+  `already_current`, because folding it into `failed` misreports a working
+  restore and folding it into `restored` claims a device changed when none did.
+  Found by running a real restore elevated, which printed *"Re-added 0
+  package(s); 1 failed"* for an operation that had done exactly the right
+  thing.
+- **Windows Update errors bypassed the translation table that existed to
+  explain them.** `explain_hresult` was only ever reached by download and
+  install *result codes*, never by a failure of the search itself — which is
+  the most common way this goes wrong. A real elevated run surfaced
+  `the update search failed: 0x8024001E` and left the user with a hex number.
+  `wua_err` now takes the `HRESULT` and routes it through the table.
+- Added `0x8024001E` (the Update Agent would not start its server for this
+  session — seen when UAC elevates into a different account than the one
+  signed in) and `0x8024001F` (no network) to that table.
+
+### Added
+- `odysync drivers backup --only oem23.inf` backs up named packages instead of
+  the whole driver store. A name that matches nothing is an error rather than
+  an empty backup, which would look like success right until someone needed it.
+
 ## [2.2.0]
 
 ### Added

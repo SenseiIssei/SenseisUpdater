@@ -247,6 +247,14 @@ enum DriverAction {
         /// Why this backup is being taken, recorded in the manifest.
         #[arg(long, default_value = "manual")]
         reason: String,
+
+        /// Back up only these published names, e.g. `oem23.inf`.
+        ///
+        /// A full export copies the whole driver store — several gigabytes —
+        /// so backing up just the package about to be replaced is often what
+        /// is actually wanted.
+        #[arg(long, value_delimiter = ',')]
+        only: Vec<String>,
     },
 
     /// List the backups on disk, newest first.
@@ -1028,11 +1036,32 @@ async fn run_driver_action(action: DriverAction, json: bool, style: &Style) -> R
     use odysync_backends::driver_backup;
 
     match action {
-        DriverAction::Backup { reason } => {
-            let packages = driver_backup::list_packages().await?;
+        DriverAction::Backup { reason, only } => {
+            let mut packages = driver_backup::list_packages().await?;
             if packages.is_empty() {
                 println!("No third-party driver packages are installed; nothing to back up.");
                 return Ok(0);
+            }
+
+            if !only.is_empty() {
+                let wanted: Vec<String> =
+                    only.iter().map(|s| s.trim().to_ascii_lowercase()).collect();
+                packages.retain(|p| wanted.contains(&p.published_name.to_ascii_lowercase()));
+
+                // A name that matched nothing is an error, not an empty
+                // backup: silently exporting zero packages would look like a
+                // successful backup right up until someone needed it.
+                for name in &wanted {
+                    if !packages
+                        .iter()
+                        .any(|p| p.published_name.eq_ignore_ascii_case(name))
+                    {
+                        anyhow::bail!(
+                            "no driver package named {name:?} is installed. \
+                             Published names look like `oem23.inf`."
+                        );
+                    }
+                }
             }
 
             println!(
@@ -1105,10 +1134,19 @@ async fn run_driver_action(action: DriverAction, json: bool, style: &Style) -> R
             }
 
             println!(
-                "Re-added {} package(s); {} failed.",
+                "Re-added {} package(s) onto a device; {} already current; {} failed.",
                 report.restored.len(),
+                report.already_current.len(),
                 report.failed.len()
             );
+            for name in &report.already_current {
+                println!(
+                    "  {}",
+                    style.dim(&format!(
+                        "{name}: back in the driver store, but no device needed it"
+                    ))
+                );
+            }
             for failure in &report.failed {
                 eprintln!("  {failure}");
             }
@@ -1125,7 +1163,7 @@ async fn run_driver_action(action: DriverAction, json: bool, style: &Style) -> R
                      force the older one."
                 )
             );
-            Ok(if report.failed.is_empty() { 0 } else { 1 })
+            Ok(if report.is_success() { 0 } else { 1 })
         }
 
         DriverAction::Prune { keep } => {
